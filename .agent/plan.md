@@ -23,14 +23,16 @@ Context din mesajul inițial: inițializare repo (`docs/`, `.agent/memory-bank/`
 - [x] Pasul 5c: Validare live BLE (`88:4A:18:EA:CD:A0`, `0xFFFF` "DW", evenimente `0x00`=CLOSE / `0x01`=OPEN, monotonic counter 2->3->4->5, 3197 mV)
 - [x] Pasul 6: Scrierea permanentă în flash a firmware-ului `dw2_ble` (validat cold boot, contor 1..7)
 - [x] Pasul 7: Componentă receptor BLE pe ESP32 WROOM (`esp32_receiver/dw2_ble_receiver.hpp`, `main.cpp`, `platformio.ini`) gata pentru `smart-home-heating`
-- [ ] Pasul 8: Extindere firmware Pro:
-  - Ring buffer circular de 128 KB Flash (~10.500 evenimente)
-  - Măsurare durată deschidere (`open_duration_sec`) la închidere
-  - Master RTC Beacon (timestamp Epoch în advertising pentru refacere ceas la căderi de curent)
-  - Structură NVS parametri configurabili (Wi-Fi fallback on/off, SSID, pass, timeout ACK, ajar timeout)
-  - Profil BLE GATT pentru configurare Over-The-Air, sincronizare ceas și OTA firmware
-- [ ] Pasul 9: Creare utilitar unificat `tools/dw2_tool.py` (build, flash serial, monitor, ble-ota, ble-config, sync-time, dump-logs)
-- [ ] Pasul 10: Compilare, testare și validare finală
+- [x] Pasul 8: Extindere firmware Pro:
+  - [x] Ring buffer circular de 128 KB Flash (8.192 evenimente la `0x000E0000` - `0x000FFFFF`)
+  - [x] Măsurare durată deschidere (`open_duration_sec`) la închidere
+  - [x] Alarmă ușă deschisă (Ajar alert > 45s, repetată la 15s)
+  - [x] Feedback LED distinct (1 blink Open, 2 Close, 3 Boot, 5 Secret Knock)
+  - [x] Gest secret de bătaie (Secret Knock - 5 tranziții rapide < 1200ms)
+  - [x] Profil BLE GATT Opulinks OTA (`0xAAAA`, `0xBBB0`, `0xBBB1`) activat pe Secret Knock (fereastră 3 minute)
+  - [x] Sincronizare ceas Epoch RTC (`0x0300`) și descărcare jurnal Flash (`0x0301`) peste BLE
+- [x] Pasul 9: Utilitar unificat `tools/dw2_tool.py` (build, ports, monitor, scan, ota, sync-time, dump-logs)
+- [ ] Pasul 10: Flash pe placă și validare funcțională
 
 ## Verification steps
 

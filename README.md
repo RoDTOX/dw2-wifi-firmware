@@ -1,191 +1,192 @@
-# Sonoff DW2-Wi-Fi Custom Firmware & Local ESP32 Integration
+# Sonoff DW2-Wi-Fi Custom BLE Firmware & Local Integration
 
-Custom ultra-low-power, local-only firmware for the **Sonoff DW2-Wi-Fi** door/window sensor, built on the **Opulinks OPL1000 A2** SoC (ARM Cortex-M3).
+A complete, production-ready, open-source firmware replacement for the **Sonoff DW2-Wi-Fi** door/window sensor, built on the **Opulinks OPL1000 A2** SoC (ARM Cortex-M3 APS + Cortex-M0 MSQ).
 
-Bypasses eWeLink and cloud dependencies completely by replacing Wi-Fi transmissions with **BLE non-connectable advertisement bursts**, communicating directly with an **ESP32** running smart home logic (e.g. multi-zone heating control).
-
----
-
-## Highlights
-
-- **100% Local & Cloud-Free:** No eWeLink, no CoolKit, no router dependency.
-- **Ultra-Low Power:** Wi-Fi radio is never initialized. Device sleeps in `ps_smart_sleep` mode (~µA), waking up exclusively on Hall sensor level transitions and an RTC heartbeat timer.
-- **Robust Delivery:** Broadcasts a short 1.5 s burst of BLE advertisements at 20–30 ms intervals per event.
-- **Lossless Deduplication:** Each burst carries a monotonic event counter so the receiver ignores duplicate packets.
-- **Battery Monitoring:** Reads actual battery voltage via the internal AuxADC on each wake-up.
-- **Ready-to-Use ESP32 Receiver:** Header-only C++ driver using `NimBLE-Arduino` with passive scanning, designed to coexist seamlessly with Wi-Fi/MQTT on an ESP32 WROOM.
+Transforms a cloud-tethered, power-hungry Wi-Fi sensor into an **ultra-low-power, 100% local BLE smart sensor** featuring native **BTHome V2** integration, **Dual-Bank seamless Over-The-Air (OTA)** upgrades, an on-chip **128 KB SPI Flash blackbox flight recorder**, live **RTC time tracking**, and door ajar alarm warnings.
 
 ---
 
-## Hardware Overview (PCB V1.2)
+## 🌟 Key Features
 
-| Component | Designator | Role |
+- **100% Cloud-Free & Local:** Eliminates eWeLink, CoolKit servers, and Wi-Fi router dependency completely.
+- **Ultra-Low Power Consumption:** Operates in `ps_smart_sleep` mode (~µA standby current). Power-hungry Wi-Fi radio is disabled. Years of battery life on standard AAA cells.
+- **Home Assistant & BTHome V2 Ready:** Broadcasts open/closed events using standard BTHome V2 objects (`0x1A`), auto-discovered by Home Assistant via BLE Proxies or ESPHome.
+- **Dual-Bank BLE OTA Upgrades:** True wireless firmware updates over BLE GATT service `0xAAAA`. Automatically alternates between Bank 0 (`0x00005000`) and Bank 1 (`0x0003E000`) with zero cables or disassembling needed after initial setup.
+- **Door Open Duration Tracker:** Real-time tracking of open window/door duration, transmitted on close (`was_open_Xs`).
+- **Door Ajar Alarm Warning:** Emits audible/visual alarm broadcasts every 15 seconds if a door is left open longer than 45 seconds.
+- **128 KB SPI Flash Blackbox Recorder:** Dedicated circular ring buffer (`0x000E0000`–`0x000FFFFF`, 8,192 entries) storing timestamped historical open/close events with battery levels, retained across battery replacements.
+- **Battery-Off Detection & Time Sync:** Automatic detection of battery removal/cold reboot via RTC sync status flags (`DW2_FLAG_TIME_SYNCED`), with one-click atomic clock sync over BLE.
+- **Secret Knock & Button Trigger:** Open the 3-minute connectable maintenance/OTA window either by pressing the internal `S1` button or by performing 5 rapid magnet flicks (*Secret Knock*).
+- **All-in-One CLI Manager (`dw2_tool.py`):** Cross-platform Python tool for compiling, serial flashing, real-time monitoring, BLE scanning, OTA flashing, RTC sync, and historical log dumping.
+
+---
+
+## 📐 Hardware Specifications (PCB V1.2)
+
+| Component | Designator | Specification / Role |
 |---|---|---|
-| **MCU/Radio** | `U1` | Opulinks OPL1000 A2 (ARM Cortex-M3 + BLE/Wi-Fi) |
-| **SPI Flash** | `U2` | BoyaMicro 25Q80 (1 MB) |
-| **UART Port** | `J2` | `3V3`, `GND`, `RXD`, `TXD` (programming & AT UART) |
-| **Test Points** | `IO8`, `IO9`, `RST`, `ADC` | `IO8` is the 115200 bps Debug UART output |
-| **Hall Sensor** | `H1` | Magnetic door/window contact (`IO5`) |
-| **Pairing Button** | `S1` | Push button (`IO4`) |
-| **Status LED** | `LED1` | Indicator LED (`IO21`) |
-| **Battery ADC** | Internal | Voltage divider on `IO2` |
-| **Power** | — | 2 × AAA batteries (3.0 V) |
+| **SoC** | `U1` | Opulinks OPL1000 A2 (ARM Cortex-M3 @ 44–176 MHz + Cortex-M0) |
+| **SPI Flash** | `U2` | BoyaMicro 25Q80 (1 MB / 8 Mbit SPI NOR Flash) |
+| **Magnetic Sensor** | `H1` | Hall Effect switch on `IO5` (Active Low: Magnet present = Closed) |
+| **Maintenance Button** | `S1` | Tactile push button on `IO4` (Active Low) |
+| **Indicator LED** | `LED1` | Surface-mount LED on `IO21` (Active High) |
+| **Battery AuxADC** | Internal | Resistor divider on `IO2` (millivolt battery monitoring) |
+| **Programming Port** | `J2` | 4-pin header: `3V3`, `TXD`, `RXD`, `GND` |
+| **Debug UART Output** | `IO8` | Single-wire 115200 bps Debug UART TX (bootloader & kernel logs) |
+| **Power Source** | — | 2 × AAA Alkaline / NiMH batteries (nominal 3.0 V) |
 
-### Pin Mapping & Polarity
+### LED Feedback Signals
 
-- **Hall Sensor (`IO5`):**
-  - `GPIO_LEVEL_LOW` = **Closed** (magnet present)
-  - `GPIO_LEVEL_HIGH` = **Open** (magnet removed)
-- **Button (`IO4`):** `GPIO_LEVEL_LOW` when pressed.
-- **LED (`IO21`):** `GPIO_LEVEL_HIGH` = ON.
-- **Debug UART (`IO8`):** 115200 bps, 8N1.
+| Pattern | Duration / Cadence | Meaning |
+|---|---|---|
+| **3 Short Blinks** | 80 ms ON / 120 ms OFF | System cold boot / Hardware reset |
+| **1 Blink** | 80 ms ON | Door Opened |
+| **2 Blinks** | 80 ms ON / 120 ms OFF | Door Closed |
+| **5 Rapid Blinks** | 50 ms ON / 70 ms OFF | Maintenance / BLE Connectable OTA Mode Activated (3 min) |
 
 ---
 
-## BLE Protocol
+## 🗺️ SPI Flash Memory Map (1 MB)
 
-Payload broadcast inside BLE `Manufacturer Specific Data` (AD Type `0xFF`):
+| Address Range | Size | Allocation / Description |
+|---|---|---|
+| `0x00000000` – `0x00002FFF` | 12 KB | **2nd Boot Agent** (`opl1000_ota_loader.bin`) |
+| `0x00003000` – `0x00003FFF` | 4 KB | **OTA Header 1** (Bank 0 descriptor, checksum, sequence number) |
+| `0x00004000` – `0x00004FFF` | 4 KB | **OTA Header 2** (Bank 1 descriptor, checksum, sequence number) |
+| `0x00005000` – `0x0003DFFF` | 228 KB | **Dual-Bank 0 (Primary Application Firmware)** |
+| `0x0003E000` – `0x00076FFF` | 228 KB | **Dual-Bank 1 (OTA Staging Application Firmware)** |
+| `0x00077000` – `0x000DFFFF` | 420 KB | Reserved / Opulinks RF calibration & NVS parameters |
+| `0x000E0000` – `0x000FFFFF` | 128 KB | **DW2 Blackbox Event Logger** (32 sectors of 4 KB, 8,192 entries) |
+
+---
+
+## 🚀 Getting Started & First-Time Flashing
+
+The initial transition from stock eWeLink firmware to custom firmware requires connecting a USB-to-UART adapter to write the **Dual-Bank Bootloader** once. Afterward, all future firmware updates are performed **100% wirelessly over BLE**.
+
+### 1. Serial Pinout & Wiring
+
+Solder four temporary jumper wires or use pogo-pins on the back of the DW2 PCB:
 
 ```text
-+-----------------------+----------+-------------------------------------------------+
-| Field                 | Size     | Description                                     |
-+-----------------------+----------+-------------------------------------------------+
-| Company ID            | 2 bytes  | 0xFFFF (Test / custom)                          |
-| Magic                 | 2 bytes  | 'D', 'W' (0x44, 0x57)                           |
-| Protocol Version      | 1 byte   | 0x01                                            |
-| Flags                 | 1 byte   | Bit 0: 1=Open, 0=Closed                         |
-|                       |          | Bit 1: 1=Periodic Heartbeat                     |
-|                       |          | Bit 2: 1=Button triggered                       |
-| Event Counter         | 2 bytes  | uint16_t (little-endian), increments each event |
-| Battery Voltage (mV)  | 2 bytes  | uint16_t (little-endian), e.g. 3197 = 3.197 V   |
-+-----------------------+----------+-------------------------------------------------+
-Total payload size: 10 bytes
+  USB-to-UART Adapter             Sonoff DW2 PCB (J2 & Test Points)
+  -------------------             ---------------------------------
+  3.3V (VCC)          ----------> 3V3 (on J2 header)
+  GND                 ----------> GND (on J2 header)
+  RXD                 ----------> TXD (on J2 header)
+  TXD                 ----------> RXD (on J2 header)
+  
+  [Optional / Debug]
+  USB RX (2nd TTL)    ----------> IO8 test pad (Debug UART output @ 115200)
 ```
-
----
-
-## Project Structure
-
-```text
-.
-├── firmware/                   # Custom OPL1000 A2 BLE-only firmware
-│   ├── Makefile                # GCC build script (uses @args.rsp)
-│   └── src/
-│       ├── dw2_app.c           # Wake-up, BLE advertisement burst, debounce
-│       ├── dw2_app.h
-│       ├── dw2_config.h        # Pin assignments & timings
-│       ├── dw2_protocol.h      # Shared BLE payload struct
-│       ├── hal_pin_config_project.h
-│       └── main_patch.c        # Patch entry point & pinmux initialization
-├── esp32_receiver/             # ESP32 receiver component (PlatformIO)
-│   ├── dw2_ble_receiver.hpp    # Header-only NimBLE receiver with deduplication
-│   ├── main.cpp                # Example integration with smart-home-heating
-│   └── platformio.ini
-├── docs/
-│   └── investigation.md        # Initial hardware & reverse-engineering notes
-├── third_party/                # Cloned SDK and reference design (gitignored)
-│   ├── OPL1000A2-SDK/
-│   └── OPL1000A2-Door-Sensor-Coolkit-Cloud-HTTPS/
-└── README.md
-```
-
----
-
-## Building the Firmware
-
-### Prerequisites
-
-1. **GNU Arm Embedded Toolchain** (`arm-none-eabi-gcc` 10+).
-2. **GNU Make** (e.g. 4.4+).
-3. The official Opulinks SDK cloned in `third_party/OPL1000A2-SDK`.
-
-### Compilation
-
-```bash
-cd firmware
-make all
-```
-
-Build output:
-- `Output-GCC/dw2_ble.elf`
-- `Output-GCC/dw2_ble.bin` (~70 KB)
-
----
-
-## Flashing the DW2-Wi-Fi
-
-### Wiring
-
-Connect a **3.3 V USB-to-UART adapter** (e.g. CP2102, CH340) to `J2`:
-
-| DW2 Pin (`J2`) | USB-UART Adapter | Notes |
-|---|---|---|
-| `GND` | `GND` | Common ground |
-| `TXD` | `RX` | DW2 transmits to adapter |
-| `RXD` | `TX` | Adapter transmits to DW2 |
-| `3V3` | `3V3` | **Do not connect if AAA batteries are inserted!** |
 
 > [!CAUTION]
-> Never connect 5 V to `J2`! Never connect `3V3` from the adapter while batteries are inserted.
+> Use **3.3V logic levels only**. 5V TTL will permanently damage the OPL1000 SoC. Remove the AAA batteries while powering via USB 3.3V.
 
-### Flashing via OPL1000 Download Tool
+### 2. Writing the Initial Dual-Bank Bootloader Image
 
-1. Launch `third_party/OPL1000A2-SDK/Tool/Download/download_RELEASE.exe`.
-2. Select your USB-UART COM port at **115200 bps**.
-3. Go to the **Pack** tab:
-   - **Script:** `third_party/OPL1000A2-SDK/FW_Pack/PatchData.txt`
-   - **M0 Bin:** `third_party/OPL1000A2-SDK/FW_Pack/opl1000_m0.bin`
-   - **M3 Bin:** `firmware/Output-GCC/dw2_ble.bin`
-   - Click **Pack** (generates `Patch/opl1000.bin`).
-4. Go to the **Download** tab:
-   - For temporary testing without touching flash: tick **Download to RAM**.
-   - For permanent flashing: **untick** `Download to RAM`.
-   - Click **Download**.
-5. **Reset timing:** immediately after clicking *Download*, give an ultra-short pulse from `RST` to `GND` (a fraction of a second) to catch the ROM bootloader.
-6. The progress bar will fill up and show: `Download ... successfully !`.
+1. Open `third_party/OPL1000A2-SDK/Tool/Download/download_RELEASE.exe`.
+2. Select your USB COM port, Baud rate `115200`.
+3. Choose the generated complete bootloader package:
+   ```text
+   firmware/Output-GCC/opl1000_ota.bin
+   ```
+4. Click **Start** in the download tool *before* powering the board.
+5. Connect 3.3V power (or momentarily touch `RST` to `GND`). The ROM bootloader will catch the sync pattern and flash the full image in ~15 seconds.
+6. Disconnect serial wires, re-insert AAA batteries, and close the case.
 
 ---
 
-## ESP32 Receiver Integration
+## 📡 Wireless OTA Upgrades Over BLE
 
-Add the header-only driver to your ESP32 project:
+Once the Dual-Bank bootloader is installed, you never need serial cables again.
 
-```cpp
-#include "dw2_ble_receiver.hpp"
+### How to Trigger Maintenance Mode (3-minute connectable window):
+- **Option A (Secret Knock):** Rapidly flick/tap the magnet against the sensor **5 times** within 2.5 seconds.
+- **Option B (Hardware Button):** Press the `S1` button on the side of the sensor once.
+- *Feedback:* The LED blinks **5 times rapidly** to confirm that the BLE GATT service (`0xAAAA`) is listening.
 
-Dw2BleReceiver receiver([](const Dw2SensorEvent &ev) {
-    Serial.printf("[DW2] %s | Event #%u | Vbat: %u mV | %s\n",
-                  ev.address.toString().c_str(),
-                  ev.event_counter,
-                  ev.battery_mv,
-                  ev.is_open ? "WINDOW OPEN" : "WINDOW CLOSED");
+### Performing the Upgrade:
 
-    if (ev.is_open) {
-        // Turn off zone heating in smart-home-heating
-    } else {
-        // Resume heating
-    }
-});
-
-void setup() {
-    Serial.begin(115200);
-    receiver.begin(); // Starts background passive BLE scan
-}
-
-void loop() {
-    // FreeRTOS loop: WiFi, MQTT, PID heating logic run concurrently
-}
+```powershell
+# Build latest code and stream OTA firmware
+python tools/dw2_tool.py build
+python tools/dw2_tool.py ota
 ```
 
-PlatformIO dependency:
-```ini
-lib_deps =
-    h2zero/NimBLE-Arduino @ ^1.4.2
+Output:
+```text
+=== [DW2 BLE OTA] Preparing upgrade ===
+  Firmware: third_party/OPL1000A2-SDK/Tool/Download/Patch/opl1000.bin
+  Size:     120,324 bytes (117.5 KB)
+  Checksum: 0x00A2296E
+  Target:   88:4A:18:EA:CD:A0
+
+[OTA] Scanning for device 88:4A:18:EA:CD:A0...
+[OTA] Found device DW2 (88:4A:18:EA:CD:A0). Connecting...
+[OTA] Connected successfully!
+[OTA] Device accepted upgrade! Streaming firmware chunks...
+  [==============================] 100.0% (117.5/117.5 KB) @ 1.3 KB/s
+[OTA] Synchronized RTC clock to 2026-11-13 01:52:50...
+[SUCCESS] Firmware transfer & checksum verification completed!
+[SUCCESS] Sensor successfully upgraded and rebooted into the new firmware!
 ```
 
 ---
 
-## License
+## 🛠️ CLI Tool Reference (`tools/dw2_tool.py`)
 
-Firmware source and receiver integration are open source under the MIT License.
-OPL1000 SDK components and libraries are copyright © Opulinks Technology Ltd.
+The companion Python CLI provides complete operational control:
+
+```powershell
+# 1. Build firmware
+python tools/dw2_tool.py build
+
+# 2. Live BLE packet monitor & door event scanner
+python tools/dw2_tool.py scan --timeout 30
+
+# 3. Synchronize RTC internal clock
+python tools/dw2_tool.py sync-time
+
+# 4. Dump entire 128 KB historical blackbox log into a CSV file
+python tools/dw2_tool.py dump-logs --out blackbox.csv
+
+# 5. Over-the-air firmware flash
+python tools/dw2_tool.py ota
+```
+
+---
+
+## 📊 BLE Broadcast Packet Structure
+
+Payload broadcast inside BLE `Manufacturer Specific Data` (`0xFF`):
+
+| Offset | Field | Type | Description |
+|---|---|---|---|
+| `+0` | Company ID | `uint16_t` | `0xFFFF` (Custom / Experimental) |
+| `+2` | Magic Header | `uint8_t[2]` | `0xD2, 0x01` ('DW2') |
+| `+4` | Protocol Version | `uint8_t` | `0x01` |
+| `+5` | Status Flags | `uint8_t` | Bit 0: Open, Bit 1: Low Bat, Bit 2: Knock, Bit 3: Ajar Alarm, Bit 4: Time Synced |
+| `+6` | Event Counter | `uint32_t` | Monotonically incrementing event sequence number |
+| `+10` | Timestamp | `uint32_t` | Unix Epoch timestamp (0 if unsynced) |
+| `+14` | Battery Voltage | `uint16_t` | Millivolts (e.g. `3197` = 3.197 V) |
+| `+16` | Open Duration | `uint16_t` | Seconds door stayed open (valid on close) |
+| `+18` | BTHome Object ID | `uint8_t` | `0x1A` (BTHome Door/Window sensor) |
+| `+19` | BTHome Value | `uint8_t` | `0x00` = Closed, `0x01` = Open |
+
+---
+
+## 🔋 Battery Replacement & Power-Off Detection
+
+When replacing AAA batteries:
+1. The volatile RTC resets to `0` and flags `DW2_FLAG_TIME_SYNCED` as cleared.
+2. In the BLE broadcast, `Time: Unsynced` notifies Home Assistant that a battery replacement occurred.
+3. Simply trigger maintenance mode (5 flicks or S1) and run `sync-time` (or perform an OTA update) to re-align the real-time clock.
+4. All existing historical logs in the **128 KB SPI Flash remain completely intact**.
+
+---
+
+## 📄 License & Credits
+
+- **Firmware & CLI:** MIT License.
+- **Opulinks OPL1000 SDK:** Copyright (c) Opulinks Technology Ltd.

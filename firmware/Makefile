@@ -154,6 +154,8 @@ INCDIR += -I $(SDK_ROOT)/APS_PATCH/project/opl1000/lib
 
 M_SRC  = ./src/main_patch.c
 M_SRC += ./src/dw2_app.c
+M_SRC += ./src/dw2_flash_log.c
+M_SRC += ./src/dw2_ota.c
 
 .PHONY: all clean
 
