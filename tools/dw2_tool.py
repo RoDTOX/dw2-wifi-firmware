@@ -103,7 +103,7 @@ def cmd_build(args):
                 paddr = 0x004164a0
                 paddr_bytes = struct.pack(">I", paddr)
                 b3_first12 = struct.pack(">4sHHI", b"PTCH", 4, 0x114, plen)
-                hdr_sum = (sum(b3_first12) + 8) & 0xFFFFFFFF   # Header checksum: sum(12 bytes) + 8
+                hdr_sum = sum(b3_first12) & 0xFFFFFFFF   # Header checksum: exact sum of first 12 bytes
                 b3_hdr = b3_first12 + struct.pack(">II", hdr_sum, paddr)
                 trailer_val = (sum(paddr_bytes) + sum(new_m3)) & 0xFFFFFFFF
                 b3_trailer = struct.pack(">I", trailer_val)
