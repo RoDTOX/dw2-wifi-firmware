@@ -29,6 +29,12 @@
   - `dw2_ble_receiver.hpp`: header-only NimBLE-Arduino callback handler with passive scanning (50% duty cycle, coexists seamlessly with ESP32 Wi-Fi).
   - `main.cpp`: example integration triggering heating cutoff on window open / resume on close.
   - `platformio.ini`: ready to build or copy into `smart-home-heating`.
+- Enhanced Pro features implemented:
+  - 128 KB Circular Ring Buffer in Flash (`0x000E0000`, 8,192 events).
+  - Door open duration calculation (`open_duration_sec`) on close.
+  - Master RTC Authoritative Time Beacon flag for blackout recovery.
+  - Persistent NVS Flash configuration structure (`dw2_nv_config_t`).
+  - Standalone CLI Manager `tools/dw2_tool.py` (`build`, `ports`, `monitor`, `scan`).
 
 ## Pending
 
