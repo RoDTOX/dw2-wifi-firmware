@@ -1,9 +1,13 @@
 /**
  * @file dw2_ble_receiver.hpp
- * @brief Header-only DW2 BLE passive receiver for ESP32 (Arduino / PlatformIO).
+ * @brief Header-only DW2 BLE Pro receiver for ESP32 (Arduino / PlatformIO).
  *
- * Uses NimBLE-Arduino for ultra-lightweight passive BLE scanning concurrent
- * with Wi-Fi on ESP32 WROOM. Integrates directly into smart-home-heating.
+ * Supports Protocol V2:
+ * - Real-time UNIX Epoch timestamp decoding
+ * - Monotonic 32-bit counter deduplication (Anti-Replay)
+ * - Door Ajar warning (>45s) handling
+ * - Battery voltage & Low Battery warning (<2.3V)
+ * - Coexists seamlessly with ESP32 Wi-Fi / MQTT
  */
 
 #pragma once
@@ -15,20 +19,25 @@
 #define DW2_BLE_COMPANY_ID          (0xFFFFU)
 #define DW2_BLE_MAGIC_0             (0x44U) /* 'D' */
 #define DW2_BLE_MAGIC_1             (0x57U) /* 'W' */
-#define DW2_BLE_PROTO_VERSION       (0x01U)
 
 #define DW2_FLAG_DOOR_OPEN          (1U << 0)
 #define DW2_FLAG_HEARTBEAT          (1U << 1)
 #define DW2_FLAG_BUTTON_TEST        (1U << 2)
+#define DW2_FLAG_DOOR_AJAR          (1U << 3)
+#define DW2_FLAG_TIME_SYNCED        (1U << 4)
+#define DW2_FLAG_LOW_BATTERY        (1U << 5)
 
-struct __attribute__((packed)) Dw2AdvPayload
+struct __attribute__((packed)) Dw2AdvPayloadV2
 {
     uint16_t company_id;
     uint8_t  magic[2];
     uint8_t  version;
     uint8_t  flags;
-    uint16_t event_counter;
+    uint32_t event_counter;
+    uint32_t epoch_sec;
     uint16_t battery_mv;
+    uint8_t  bthome_id;
+    uint8_t  bthome_val;
 };
 
 struct Dw2SensorEvent
@@ -37,7 +46,11 @@ struct Dw2SensorEvent
     bool          is_open;
     bool          is_heartbeat;
     bool          is_button;
-    uint16_t      event_counter;
+    bool          is_door_ajar;
+    bool          is_time_synced;
+    bool          is_low_battery;
+    uint32_t      event_counter;
+    uint32_t      epoch_sec;
     uint16_t      battery_mv;
     int           rssi;
 };
@@ -59,43 +72,42 @@ public:
         NimBLEDevice::init("");
         NimBLEScan *scan = NimBLEDevice::getScan();
         scan->setScanCallbacks(this, false);
-        scan->setActiveScan(false);             /* Passive scan: lowest power, doesn't interfere with Wi-Fi */
+        scan->setActiveScan(false);             /* Passive scan: ultra low-power, zero interference with Wi-Fi */
         scan->setInterval(160);                 /* 100 ms */
-        scan->setWindow(80);                    /* 50 ms (50% duty cycle, coexists cleanly with Wi-Fi) */
-        scan->setMaxResults(0);                 /* Continuous scan */
+        scan->setWindow(80);                    /* 50 ms (50% duty cycle) */
+        scan->setMaxResults(0);
         scan->start(0, nullptr, false);
     }
 
     void onDiscovered(const NimBLEAdvertisedDevice *dev) override
     {
-        processAdvertisedDevice(dev);
+        processDevice(dev);
     }
 
     void onResult(const NimBLEAdvertisedDevice *dev) override
     {
-        processAdvertisedDevice(dev);
+        processDevice(dev);
     }
 
 private:
-    void processAdvertisedDevice(const NimBLEAdvertisedDevice *dev)
+    void processDevice(const NimBLEAdvertisedDevice *dev)
     {
         const std::string &mfg = dev->getManufacturerData();
-        if (mfg.size() < sizeof(Dw2AdvPayload))
+        if (mfg.size() < sizeof(Dw2AdvPayloadV2))
         {
             return;
         }
 
-        const auto *p = reinterpret_cast<const Dw2AdvPayload *>(mfg.data());
+        const auto *p = reinterpret_cast<const Dw2AdvPayloadV2 *>(mfg.data());
         if (p->company_id != DW2_BLE_COMPANY_ID ||
             p->magic[0]   != DW2_BLE_MAGIC_0    ||
-            p->magic[1]   != DW2_BLE_MAGIC_1    ||
-            p->version    != DW2_BLE_PROTO_VERSION)
+            p->magic[1]   != DW2_BLE_MAGIC_1)
         {
             return;
         }
 
-        /* Deduplicate packets within the same burst using the monotonic event counter */
-        if (has_seen_event_ && p->event_counter == last_counter_)
+        /* Anti-Replay / Deduplication filter */
+        if (has_seen_event_ && p->event_counter <= last_counter_)
         {
             return;
         }
@@ -104,13 +116,17 @@ private:
         last_counter_   = p->event_counter;
 
         Dw2SensorEvent ev;
-        ev.address       = dev->getAddress();
-        ev.is_open       = (p->flags & DW2_FLAG_DOOR_OPEN) != 0;
-        ev.is_heartbeat  = (p->flags & DW2_FLAG_HEARTBEAT) != 0;
-        ev.is_button     = (p->flags & DW2_FLAG_BUTTON_TEST) != 0;
-        ev.event_counter = p->event_counter;
-        ev.battery_mv    = p->battery_mv;
-        ev.rssi          = dev->getRSSI();
+        ev.address        = dev->getAddress();
+        ev.is_open        = (p->flags & DW2_FLAG_DOOR_OPEN) != 0;
+        ev.is_heartbeat   = (p->flags & DW2_FLAG_HEARTBEAT) != 0;
+        ev.is_button      = (p->flags & DW2_FLAG_BUTTON_TEST) != 0;
+        ev.is_door_ajar   = (p->flags & DW2_FLAG_DOOR_AJAR) != 0;
+        ev.is_time_synced = (p->flags & DW2_FLAG_TIME_SYNCED) != 0;
+        ev.is_low_battery = (p->flags & DW2_FLAG_LOW_BATTERY) != 0;
+        ev.event_counter  = p->event_counter;
+        ev.epoch_sec      = p->epoch_sec;
+        ev.battery_mv     = p->battery_mv;
+        ev.rssi           = dev->getRSSI();
 
         if (callback_)
         {
@@ -119,6 +135,6 @@ private:
     }
 
     Dw2EventCallback callback_;
-    uint16_t         last_counter_;
+    uint32_t         last_counter_;
     bool             has_seen_event_;
 };

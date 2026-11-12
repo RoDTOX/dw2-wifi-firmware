@@ -1,45 +1,60 @@
 /**
  * @file main.cpp
- * @brief Example ESP32 WROOM firmware integrating DW2 BLE door sensor into smart-home-heating.
+ * @brief ESP32 receiver integration with smart-home-heating and home-security logic.
  */
 
 #include <Arduino.h>
+#include <time.h>
 #include "dw2_ble_receiver.hpp"
 
-/* MAC address filter: matches your flashed DW2 sensor */
 static const char *TARGET_DW2_MAC = "88:4a:18:ea:cd:a0";
 
 static void onDoorEvent(const Dw2SensorEvent &ev)
 {
-    /* Optional: filter by MAC if multiple sensors are deployed */
     if (strcasecmp(ev.address.toString().c_str(), TARGET_DW2_MAC) != 0)
     {
         return;
     }
 
-    Serial.printf("[DW2] MAC: %s | RSSI: %d dBm | Event #%u | Vbat: %u mV\n",
-                  ev.address.toString().c_str(),
-                  ev.rssi,
+    char time_str[32] = "N/A";
+    if (ev.is_time_synced && ev.epoch_sec > 0)
+    {
+        time_t t = (time_t)ev.epoch_sec;
+        struct tm *tm_info = localtime(&t);
+        strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+    }
+
+    Serial.printf("\n[DW2 EVENT] #%u | Time: %s | RSSI: %d dBm | Battery: %u mV\n",
                   ev.event_counter,
+                  time_str,
+                  ev.rssi,
                   ev.battery_mv);
 
-    if (ev.is_heartbeat)
+    if (ev.is_low_battery)
     {
-        Serial.println("  -> Periodic Heartbeat (sensor is alive)");
+        Serial.println("  [ALERT] LOW BATTERY! Replace 2xAAA cells soon.");
+    }
+
+    if (ev.is_door_ajar)
+    {
+        Serial.println("  [SECURITY ALARM] DOOR AJAR! Front door has been left open for > 45 seconds!");
+        /* Trigger buzzer / push notification */
+    }
+    else if (ev.is_heartbeat)
+    {
+        Serial.println("  [STATUS] Periodic Heartbeat: Sensor is alive and operational.");
+    }
+    else if (ev.is_button)
+    {
+        Serial.println("  [TAMPER / TEST] S1 button pressed on sensor.");
     }
     else if (ev.is_open)
     {
-        Serial.println("  -> [ACTION] DOOR/WINDOW OPENED: Turning OFF heating in this zone!");
-        /* smart-home-heating integration:
-         * zoneManager.setWindowOpen(ZONE_LIVING_ROOM, true);
-         */
+        Serial.println("  [HEATING] FRONT DOOR OPENED -> Turning OFF heating in this zone.");
     }
     else
     {
-        Serial.println("  -> [ACTION] DOOR/WINDOW CLOSED: Resuming normal heating schedule.");
-        /* smart-home-heating integration:
-         * zoneManager.setWindowOpen(ZONE_LIVING_ROOM, false);
-         */
+        Serial.println("  [HEATING] FRONT DOOR CLOSED -> Resuming heating schedule.");
     }
 }
 
@@ -49,15 +64,13 @@ void setup()
 {
     Serial.begin(115200);
     delay(1000);
-    Serial.println("\n=== ESP32 Smart-Heating DW2 BLE Receiver ===");
+    Serial.println("\n=== ESP32 Home Security & Smart-Heating Receiver ===");
 
-    /* Start passive scanning; NimBLE coexists with Wi-Fi / MQTT */
     receiver.begin();
-    Serial.println("Listening for DW2 BLE advertisements...");
+    Serial.println("Passive BLE scanning active. Listening for DW2 events...");
 }
 
 void loop()
 {
-    /* FreeRTOS loop: WiFi / MQTT / PID heating logic runs here without blocking */
     delay(1000);
 }
