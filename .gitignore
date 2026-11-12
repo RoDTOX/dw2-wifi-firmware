@@ -1,0 +1,20 @@
+# Ignore third-party SDK and reference repos (cloned locally)
+third_party/
+
+# Build artifacts
+build/
+Output-GCC/
+*.o
+*.elf
+*.bin
+*.hex
+*.map
+
+# Backup dumps (keep local, never commit device-specific flash dumps)
+backups/
+*.dump
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
