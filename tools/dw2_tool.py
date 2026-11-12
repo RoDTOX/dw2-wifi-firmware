@@ -85,6 +85,36 @@ def cmd_build(args):
         if os.path.exists(bin_path):
             size = os.path.getsize(bin_path)
             print(f"[SUCCESS] Built binary: {bin_path} ({size:,} bytes / {size / 1024:.1f} KB)")
+
+            # Auto-pack into OPL1000 integrated firmware (opl1000.bin)
+            template_dir = os.path.join(repo_root, "tools", "opl1000_template")
+            out_patch = os.path.join(repo_root, "third_party", "OPL1000A2-SDK", "Tool", "Download", "Patch", "opl1000.bin")
+            if os.path.isdir(template_dir):
+                with open(os.path.join(template_dir, "b12.bin"), "rb") as f:
+                    b12 = f.read()
+                with open(os.path.join(template_dir, "b4.bin"), "rb") as f:
+                    b4 = f.read()
+                with open(os.path.join(template_dir, "b5.bin"), "rb") as f:
+                    b5 = f.read()
+                with open(bin_path, "rb") as f:
+                    new_m3 = f.read()
+
+                plen = len(new_m3) + 4
+                paddr = 0x004164a0
+                paddr_bytes = struct.pack(">I", paddr)
+                b3_first12 = struct.pack(">4sHHI", b"PTCH", 4, 0x114, plen)
+                hdr_sum = (sum(b3_first12) + 8) & 0xFFFFFFFF   # Header checksum: sum(12 bytes) + 8
+                b3_hdr = b3_first12 + struct.pack(">II", hdr_sum, paddr)
+                trailer_val = (sum(paddr_bytes) + sum(new_m3)) & 0xFFFFFFFF
+                b3_trailer = struct.pack(">I", trailer_val)
+                block3 = b3_hdr + new_m3 + b3_trailer
+
+                clean_packed = b12 + block3 + b4 + b5
+                os.makedirs(os.path.dirname(out_patch), exist_ok=True)
+                with open(out_patch, "wb") as f:
+                    f.write(clean_packed)
+                print(f"[SUCCESS] Auto-packed integrated boot image: {out_patch} ({len(clean_packed):,} bytes)")
+
             return 0
         else:
             print("[ERROR] dw2_ble.bin not found after build.")
@@ -152,15 +182,25 @@ def cmd_monitor(args):
 
 
 def parse_dw2_payload(raw_bytes):
-    """Parses DW2 manufacturer data (20 bytes)."""
-    if len(raw_bytes) < 20:
+    """Parses DW2 manufacturer data (18 bytes payload after 0xFFFF company ID)."""
+    if len(raw_bytes) < 6:
         return None
-    # Format: <H(company_id) 2s(magic) B(ver) B(flags) I(cnt) I(epoch) H(vbat) H(duration) B(bthome_id) B(bthome_val)
+
+    # Check magic
+    if raw_bytes[:2] != DW2_MAGIC:
+        return None
+
+    # Format: 2s(magic) B(ver) B(flags) I(cnt) [I(epoch) H(vbat) H(duration) B(btid) B(btval)]
     try:
-        company_id, magic, ver, flags, cnt, epoch, vbat, duration, btid, btval = struct.unpack(
-            "<H2sBBI IHHBB", raw_bytes[:20]
-        )
-        if company_id != DW2_COMPANY_ID or magic != DW2_MAGIC:
+        if len(raw_bytes) >= 18:
+            magic, ver, flags, cnt, epoch, vbat, duration, btid, btval = struct.unpack(
+                "<2sBBI IHHBB", raw_bytes[:18]
+            )
+        elif len(raw_bytes) >= 8:
+            # Fallback for V1 legacy packet
+            magic, ver, flags, cnt, vbat = struct.unpack("<2sBBHH", raw_bytes[:8])
+            epoch, duration, btid, btval = 0, 0, 0, 0
+        else:
             return None
 
         is_open = bool(flags & FLAG_DOOR_OPEN)
@@ -193,7 +233,7 @@ def parse_dw2_payload(raw_bytes):
             "is_wifi_fallback": is_wifi_fallback,
             "is_rtc_beacon": is_rtc_beacon,
         }
-    except Exception:
+    except Exception as e:
         return None
 
 
