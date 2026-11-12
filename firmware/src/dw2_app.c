@@ -1,13 +1,11 @@
 /**
  * @file dw2_app.c
- * @brief Enhanced DW2-Wi-Fi firmware:
- * - 5 min Bluetooth time-sync window on boot
- * - Real-time clock tracking (Epoch seconds)
- * - Visual LED feedback for every state
- * - Door Ajar warning (45s)
- * - Adaptive BLE Burst (300ms fast + 500ms safe)
- * - 64 KB Black-Box Flash Logger (holds 5,000+ events)
- * - BTHome V2 compatible + Anti-Replay 32-bit counter
+ * @brief Enhanced DW2 Pro firmware:
+ * 1. Auto Time-Sync: accepts BLE handshake sync from ESP32, Home Assistant or phone
+ * 2. Complete Flash Logger: logs Door Open/Close, Door Ajar alarms, Tamper/Button, Heartbeats, Low Battery
+ * 3. Power-saving LED: blinks on door open/close only during the first 24 hours (install mode)
+ * 4. 45s Door Ajar warning repeated every 10s on BLE
+ * 5. Adaptive Burst: 300ms fast + 500ms safe
  */
 
 #include <stdio.h>
@@ -43,6 +41,7 @@ typedef struct
     dw2_ble_state_t state;
     uint32_t        event_counter;
     uint32_t        base_epoch_sec;
+    uint32_t        boot_tick;
     uint32_t        base_tick;
     uint32_t        flash_log_offset;
     uint8_t         door_open;
@@ -54,7 +53,6 @@ typedef struct
 
 static dw2_app_ctx_t g_app;
 
-/* Advertising payload: Flags (3B) + Manufacturer Specific Data (2B header + sizeof(payload)) */
 static uint8_t g_adv_data[3 + 2 + sizeof(dw2_adv_payload_t)];
 
 static const uint8_t g_scan_rsp_data[] =
@@ -64,7 +62,6 @@ static const uint8_t g_scan_rsp_data[] =
     'D', 'W', '2'
 };
 
-/* LED Helpers */
 static void Dw2_LedSet(uint8_t on)
 {
     Hal_Vic_GpioOutput(DW2_LED_IO_PORT, on ? GPIO_LEVEL_HIGH : GPIO_LEVEL_LOW);
@@ -84,7 +81,14 @@ static void Dw2_LedBlink(uint8_t count, uint32_t on_ms, uint32_t off_ms)
     }
 }
 
-/* Timekeeping: combines base Epoch with elapsed SysTick */
+/* Check if we are still within the first 24h install window */
+static uint8_t Dw2_IsLedFeedbackAllowed(void)
+{
+    uint32_t elapsed_ticks = Hal_Tick_Diff(g_app.boot_tick);
+    uint32_t elapsed_sec = elapsed_ticks / (SystemCoreClockGet());
+    return (elapsed_sec < DW2_LED_DOOR_ACTIVE_SEC) ? 1U : 0U;
+}
+
 static uint32_t Dw2_GetCurrentEpoch(void)
 {
     uint32_t elapsed_ticks = Hal_Tick_Diff(g_app.base_tick);
@@ -92,16 +96,15 @@ static uint32_t Dw2_GetCurrentEpoch(void)
     return g_app.base_epoch_sec + elapsed_sec;
 }
 
-static void Dw2_SetCurrentEpoch(uint32_t epoch_sec)
+void Dw2_ApplyExternalTimeSync(uint32_t epoch_sec)
 {
     g_app.base_epoch_sec = epoch_sec;
     g_app.base_tick = Hal_Tick_Diff(0);
     g_app.time_synced = 1U;
-    DW2_LOG("[DW2] Time Synced: Epoch=%u\r\n", epoch_sec);
+    DW2_LOG("[DW2] Time Synced from BLE: Epoch=%u\r\n", epoch_sec);
     Dw2_LedBlink(2, DW2_LED_BLINK_LONG_MS, 150);
 }
 
-/* Flash Black-Box Logger (64 KB at DW2_FLASH_LOG_BASE_ADDR) */
 static void Dw2_LogEventToFlash(uint32_t epoch_sec, uint32_t counter, uint16_t vbat_mv, uint8_t flags)
 {
     dw2_log_entry_t entry;
@@ -118,7 +121,6 @@ static void Dw2_LogEventToFlash(uint32_t epoch_sec, uint32_t counter, uint16_t v
     }
     entry.checksum = csum;
 
-    /* Write entry to SPI Flash (SPI_IDX_0) */
     uint32_t write_addr = DW2_FLASH_LOG_BASE_ADDR + g_app.flash_log_offset;
     if ((g_app.flash_log_offset % 4096) == 0)
     {
@@ -129,7 +131,7 @@ static void Dw2_LogEventToFlash(uint32_t epoch_sec, uint32_t counter, uint16_t v
     g_app.flash_log_offset += sizeof(entry);
     if (g_app.flash_log_offset >= (DW2_FLASH_LOG_MAX_ENTRIES * sizeof(entry)))
     {
-        g_app.flash_log_offset = 0; /* Circular wrap */
+        g_app.flash_log_offset = 0;
     }
 }
 
@@ -182,7 +184,7 @@ static void Dw2_BuildAdvPacket(uint8_t flags, uint16_t battery_mv, uint32_t epoc
     payload.event_counter = ++g_app.event_counter;
     payload.epoch_sec     = epoch_sec;
     payload.battery_mv    = battery_mv;
-    payload.bthome_id     = 0x1AU;  /* BTHome Door Sensor */
+    payload.bthome_id     = 0x1AU;
     payload.bthome_val    = (flags & DW2_FLAG_DOOR_OPEN) ? 1U : 0U;
 
     g_adv_data[0] = 0x02U;
@@ -223,7 +225,7 @@ static void Dw2_TriggerAdaptiveBurst(uint8_t extra_flags)
 
     uint32_t epoch_sec = Dw2_GetCurrentEpoch();
 
-    /* Log event to 64KB Flash Black-Box */
+    /* Log event to Flash Black-Box (Door events, Alarms, Heartbeats, Low Battery) */
     Dw2_LogEventToFlash(epoch_sec, g_app.event_counter + 1, vbat_mv, flags);
 
     if (g_app.state == DW2_BLE_STATE_ADVERTISING_FAST || g_app.state == DW2_BLE_STATE_ADVERTISING_SAFE)
@@ -288,7 +290,6 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                 if (g_app.state != DW2_BLE_STATE_CONNECTABLE_SYNC)
                 {
                     g_app.state = DW2_BLE_STATE_ADVERTISING_FAST;
-                    /* Phase 1 (fast): 300 ms */
                     LeSendMessageAfter(&g_app.task, DW2_MSG_BURST_PHASE2, NULL, DW2_ADV_BURST_FAST_MS);
                 }
             }
@@ -299,7 +300,6 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
         {
             if (g_app.state == DW2_BLE_STATE_ADVERTISING_FAST)
             {
-                /* Switch to Phase 2 (safe 100 ms) */
                 g_app.state = DW2_BLE_STATE_ADVERTISING_SAFE;
                 Dw2_SetAdvParams(DW2_BLE_ADV_SAFE_MIN, DW2_BLE_ADV_SAFE_MAX, LE_HCI_ADV_TYPE_ADV_NONCONN_IND);
                 LeSendMessageAfter(&g_app.task, DW2_MSG_STOP_BURST, NULL, DW2_ADV_BURST_TOTAL_MS - DW2_ADV_BURST_FAST_MS);
@@ -351,7 +351,7 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
         case DW2_MSG_TIME_SYNC_TIMEOUT:
             if (g_app.state == DW2_BLE_STATE_CONNECTABLE_SYNC)
             {
-                DW2_LOG("[DW2] Time-Sync window closed -> entering normal low-power mode\r\n");
+                DW2_LOG("[DW2] 5min Time-Sync window closed -> entering normal low-power sleep\r\n");
                 LeGapAdvertisingEnable(FALSE);
                 g_app.state = DW2_BLE_STATE_IDLE;
                 ps_smart_sleep(1);
@@ -370,16 +370,23 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                 g_app.door_open = is_open;
                 g_app.door_ajar_active = 0U;
 
-                /* Visual feedback: 1 blink = Open, 2 blinks = Close */
+                /* Power-saving LED: only blink on door events during the first 24h */
+                if (Dw2_IsLedFeedbackAllowed())
+                {
+                    if (is_open)
+                    {
+                        Dw2_LedBlink(1, DW2_LED_BLINK_SHORT_MS, 0);
+                    }
+                    else
+                    {
+                        Dw2_LedBlink(2, DW2_LED_BLINK_SHORT_MS, 80);
+                    }
+                }
+
                 if (is_open)
                 {
-                    Dw2_LedBlink(1, DW2_LED_BLINK_SHORT_MS, 0);
                     /* Arm Door Ajar timer (45 s) */
                     LeSendMessageAfter(&g_app.task, DW2_MSG_DOOR_AJAR, NULL, DW2_DOOR_AJAR_TIMEOUT_MS);
-                }
-                else
-                {
-                    Dw2_LedBlink(2, DW2_LED_BLINK_SHORT_MS, 80);
                 }
 
                 Dw2_TriggerAdaptiveBurst(0U);
@@ -392,9 +399,10 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             if (g_app.door_open)
             {
                 DW2_LOG("[DW2] WARNING: Door Ajar > 45s\r\n");
+                /* Door ajar warning always blinks (security priority) */
                 Dw2_LedBlink(2, DW2_LED_BLINK_SHORT_MS, 60);
                 Dw2_TriggerAdaptiveBurst(DW2_FLAG_DOOR_AJAR);
-                /* Repeat every 10s while still open */
+                /* Repeat alert every 10s until door is closed */
                 LeSendMessageAfter(&g_app.task, DW2_MSG_DOOR_AJAR, NULL, DW2_DOOR_AJAR_REPEAT_MS);
             }
             break;
@@ -441,7 +449,8 @@ void Dw2App_Init(void)
     memset(&g_app, 0, sizeof(g_app));
     g_app.state = DW2_BLE_STATE_INIT;
     g_app.base_epoch_sec = 0;
-    g_app.base_tick = Hal_Tick_Diff(0);
+    g_app.boot_tick = Hal_Tick_Diff(0);
+    g_app.base_tick = g_app.boot_tick;
     g_app.flash_log_offset = 0;
 
     LeHostCreateTask(&g_app.task, Dw2_TaskHandler);

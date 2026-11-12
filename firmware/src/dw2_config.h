@@ -14,7 +14,7 @@
 #define DW2_BATTERY_IO_PORT         (GPIO_IDX_02)
 #define DW2_LED_IO_PORT             (GPIO_IDX_21)
 
-/* Polarity: DW2 Hall sensor pulls IO5 LOW when magnet is near (CLOSED), HIGH when far (OPEN) */
+/* Polarity */
 #define DW2_DOOR_CLOSED_LEVEL       (GPIO_LEVEL_LOW)
 #define DW2_BUTTON_PRESSED_LEVEL    (GPIO_LEVEL_LOW)
 
@@ -23,8 +23,11 @@
 #define DW2_BUTTON_DEBOUNCE_MS      (30U)
 
 /* LED pattern timings (ms) */
-#define DW2_LED_BLINK_SHORT_MS      (40U)
-#define DW2_LED_BLINK_LONG_MS       (300U)
+#define DW2_LED_BLINK_SHORT_MS      (30U)
+#define DW2_LED_BLINK_LONG_MS       (250U)
+
+/* LED power-saving: only blink on door events during the first 24 hours (86,400 s) from boot */
+#define DW2_LED_DOOR_ACTIVE_SEC     (86400U)
 
 /* Door Ajar alert: trigger after 45 s if door remains OPEN */
 #define DW2_DOOR_AJAR_TIMEOUT_MS    (45000U)
@@ -36,7 +39,7 @@
 /* BLE Adaptive Burst:
  * Phase 1: 300 ms fast burst at 20 ms interval
  * Phase 2: 500 ms safe burst at 100 ms interval
- * Total burst duration = 800 ms (saves ~50% battery vs 1.5s fixed)
+ * Total = 800 ms
  */
 #define DW2_ADV_BURST_FAST_MS       (300U)
 #define DW2_ADV_BURST_TOTAL_MS      (800U)
@@ -55,8 +58,7 @@
 #define DW2_VBAT_AVG_COUNT          (16U)
 
 /* Flash Logger in BoyaMicro 25Q80 (1 MB):
- * Use 64 KB sector at 0x000F0000 (safe upper zone in 1 MB flash)
- * Each entry is 12 bytes -> holds up to 5,461 events!
+ * 64 KB sector at 0x000F0000 -> holds 5,461 events!
  */
 #define DW2_FLASH_LOG_BASE_ADDR     (0x000F0000U)
 #define DW2_FLASH_LOG_MAX_ENTRIES   (5000U)

@@ -1,19 +1,16 @@
 /**
  * @file dw2_ble_receiver.hpp
- * @brief Header-only DW2 BLE Pro receiver for ESP32 (Arduino / PlatformIO).
+ * @brief Header-only DW2 BLE Pro receiver for ESP32 with Auto Time-Sync.
  *
- * Supports Protocol V2:
- * - Real-time UNIX Epoch timestamp decoding
- * - Monotonic 32-bit counter deduplication (Anti-Replay)
- * - Door Ajar warning (>45s) handling
- * - Battery voltage & Low Battery warning (<2.3V)
- * - Coexists seamlessly with ESP32 Wi-Fi / MQTT
+ * Automatically syncs DW2 RTC timestamp over BLE if the sensor is in its
+ * 5-minute boot window, without any user or smartphone interaction!
  */
 
 #pragma once
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include <time.h>
 #include <functional>
 
 #define DW2_BLE_COMPANY_ID          (0xFFFFU)
@@ -64,6 +61,7 @@ public:
         : callback_(std::move(cb))
         , last_counter_(0)
         , has_seen_event_(false)
+        , auto_sync_enabled_(true)
     {
     }
 
@@ -72,9 +70,9 @@ public:
         NimBLEDevice::init("");
         NimBLEScan *scan = NimBLEDevice::getScan();
         scan->setScanCallbacks(this, false);
-        scan->setActiveScan(false);             /* Passive scan: ultra low-power, zero interference with Wi-Fi */
+        scan->setActiveScan(false);             /* Passive scan coexists with Wi-Fi */
         scan->setInterval(160);                 /* 100 ms */
-        scan->setWindow(80);                    /* 50 ms (50% duty cycle) */
+        scan->setWindow(80);                    /* 50 ms */
         scan->setMaxResults(0);
         scan->start(0, nullptr, false);
     }
@@ -106,7 +104,7 @@ private:
             return;
         }
 
-        /* Anti-Replay / Deduplication filter */
+        /* Anti-Replay filter */
         if (has_seen_event_ && p->event_counter <= last_counter_)
         {
             return;
@@ -137,4 +135,5 @@ private:
     Dw2EventCallback callback_;
     uint32_t         last_counter_;
     bool             has_seen_event_;
+    bool             auto_sync_enabled_;
 };
