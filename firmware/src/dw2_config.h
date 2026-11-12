@@ -57,10 +57,14 @@
 /* AuxADC battery measurement */
 #define DW2_VBAT_AVG_COUNT          (16U)
 
+/* Flash Configuration Sector: 4 KB at 0x000DF000 */
+#define DW2_FLASH_CONFIG_ADDR       (0x000DF000U)
+
 /* Flash Logger in BoyaMicro 25Q80 (1 MB):
- * 64 KB sector at 0x000F0000 -> holds 5,461 events!
+ * 128 KB Circular Ring Buffer at 0x000E0000 -> holds 8,192 events (16 bytes each)!
  */
-#define DW2_FLASH_LOG_BASE_ADDR     (0x000F0000U)
-#define DW2_FLASH_LOG_MAX_ENTRIES   (5000U)
+#define DW2_FLASH_LOG_BASE_ADDR     (0x000E0000U)
+#define DW2_FLASH_LOG_SIZE          (0x00020000U)   /* 128 KB */
+#define DW2_FLASH_LOG_MAX_ENTRIES   (8192U)
 
 #endif /* __DW2_CONFIG_H__ */

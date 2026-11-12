@@ -44,6 +44,9 @@ typedef struct
     uint32_t        boot_tick;
     uint32_t        base_tick;
     uint32_t        flash_log_offset;
+    uint32_t        door_opened_epoch;
+    uint16_t        last_open_duration;
+    dw2_nv_config_t config;
     uint8_t         door_open;
     uint8_t         time_synced;
     uint8_t         pending_burst;
@@ -105,13 +108,48 @@ void Dw2_ApplyExternalTimeSync(uint32_t epoch_sec)
     Dw2_LedBlink(2, DW2_LED_BLINK_LONG_MS, 150);
 }
 
-static void Dw2_LogEventToFlash(uint32_t epoch_sec, uint32_t counter, uint16_t vbat_mv, uint8_t flags)
+static void Dw2_LoadConfig(void)
+{
+    Hal_Flash_AddrRead(SPI_IDX_0, DW2_FLASH_CONFIG_ADDR, 0, sizeof(dw2_nv_config_t), (uint8_t *)&g_app.config);
+    if (g_app.config.magic != 0x44574346U) /* "DWCF" */
+    {
+        DW2_LOG("[DW2] No valid config in Flash -> defaults loaded\r\n");
+        memset(&g_app.config, 0, sizeof(g_app.config));
+        g_app.config.magic = 0x44574346U;
+        g_app.config.version = 1U;
+        g_app.config.wifi_fallback_en = 0U; /* Default BLE only */
+        g_app.config.led_mode = 1U;         /* 24h install mode */
+        g_app.config.ble_ack_timeout_ms = 1000U;
+        g_app.config.door_ajar_sec = 45U;
+        strcpy(g_app.config.mqtt_topic, "home/frontdoor");
+    }
+    else
+    {
+        DW2_LOG("[DW2] Config loaded: fallback=%u ajar=%us topic=%s\r\n",
+                g_app.config.wifi_fallback_en, g_app.config.door_ajar_sec, g_app.config.mqtt_topic);
+    }
+}
+
+void Dw2_SaveConfig(const dw2_nv_config_t *new_cfg)
+{
+    memcpy(&g_app.config, new_cfg, sizeof(dw2_nv_config_t));
+    g_app.config.magic = 0x44574346U;
+    g_app.config.version = 1U;
+    Hal_Flash_4KSectorAddrErase(SPI_IDX_0, DW2_FLASH_CONFIG_ADDR);
+    Hal_Flash_AddrProgram(SPI_IDX_0, DW2_FLASH_CONFIG_ADDR, 0, sizeof(dw2_nv_config_t), (uint8_t *)&g_app.config);
+    DW2_LOG("[DW2] Config saved to Flash!\r\n");
+}
+
+static void Dw2_LogEventToFlash(uint32_t epoch_sec, uint32_t counter, uint16_t vbat_mv, uint16_t open_duration_sec, uint8_t flags)
 {
     dw2_log_entry_t entry;
-    entry.epoch_sec     = epoch_sec;
-    entry.event_counter = counter;
-    entry.battery_mv    = vbat_mv;
-    entry.flags         = flags;
+    entry.epoch_sec         = epoch_sec;
+    entry.event_counter     = counter;
+    entry.battery_mv        = vbat_mv;
+    entry.open_duration_sec = open_duration_sec;
+    entry.flags             = flags;
+    entry.reserved[0]       = 0;
+    entry.reserved[1]       = 0;
 
     uint8_t *raw = (uint8_t *)&entry;
     uint8_t csum = 0;
@@ -129,7 +167,7 @@ static void Dw2_LogEventToFlash(uint32_t epoch_sec, uint32_t counter, uint16_t v
 
     Hal_Flash_AddrProgram(SPI_IDX_0, write_addr, 0, sizeof(entry), (uint8_t *)&entry);
     g_app.flash_log_offset += sizeof(entry);
-    if (g_app.flash_log_offset >= (DW2_FLASH_LOG_MAX_ENTRIES * sizeof(entry)))
+    if (g_app.flash_log_offset >= DW2_FLASH_LOG_SIZE)
     {
         g_app.flash_log_offset = 0;
     }
@@ -172,20 +210,21 @@ static void Dw2_ButtonGpioCb(E_GpioIdx_t gpio_idx)
     LeSendMessageAfter(&g_app.task, DW2_MSG_BUTTON_DEBOUNCE, NULL, DW2_BUTTON_DEBOUNCE_MS);
 }
 
-static void Dw2_BuildAdvPacket(uint8_t flags, uint16_t battery_mv, uint32_t epoch_sec)
+static void Dw2_BuildAdvPacket(uint8_t flags, uint16_t battery_mv, uint32_t epoch_sec, uint16_t open_duration_sec)
 {
     dw2_adv_payload_t payload;
 
-    payload.company_id    = DW2_BLE_COMPANY_ID;
-    payload.magic[0]      = DW2_BLE_MAGIC_0;
-    payload.magic[1]      = DW2_BLE_MAGIC_1;
-    payload.version       = DW2_BLE_PROTO_VERSION;
-    payload.flags         = flags;
-    payload.event_counter = ++g_app.event_counter;
-    payload.epoch_sec     = epoch_sec;
-    payload.battery_mv    = battery_mv;
-    payload.bthome_id     = 0x1AU;
-    payload.bthome_val    = (flags & DW2_FLAG_DOOR_OPEN) ? 1U : 0U;
+    payload.company_id        = DW2_BLE_COMPANY_ID;
+    payload.magic[0]          = DW2_BLE_MAGIC_0;
+    payload.magic[1]          = DW2_BLE_MAGIC_1;
+    payload.version           = DW2_BLE_PROTO_VERSION;
+    payload.flags             = flags;
+    payload.event_counter     = ++g_app.event_counter;
+    payload.epoch_sec         = epoch_sec;
+    payload.battery_mv        = battery_mv;
+    payload.open_duration_sec = open_duration_sec;
+    payload.bthome_id         = 0x1AU;
+    payload.bthome_val        = (flags & DW2_FLAG_DOOR_OPEN) ? 1U : 0U;
 
     g_adv_data[0] = 0x02U;
     g_adv_data[1] = GAP_ADTYPE_FLAGS;
@@ -214,7 +253,11 @@ static void Dw2_TriggerAdaptiveBurst(uint8_t extra_flags)
     uint8_t flags = (g_app.door_open ? DW2_FLAG_DOOR_OPEN : 0U) | extra_flags;
     if (g_app.time_synced)
     {
-        flags |= DW2_FLAG_TIME_SYNCED;
+        flags |= (DW2_FLAG_TIME_SYNCED | DW2_FLAG_RTC_BEACON);
+    }
+    if (g_app.config.wifi_fallback_en)
+    {
+        flags |= DW2_FLAG_WIFI_FALLBACK;
     }
 
     uint16_t vbat_mv = Dw2_ReadBatteryMv();
@@ -226,7 +269,7 @@ static void Dw2_TriggerAdaptiveBurst(uint8_t extra_flags)
     uint32_t epoch_sec = Dw2_GetCurrentEpoch();
 
     /* Log event to Flash Black-Box (Door events, Alarms, Heartbeats, Low Battery) */
-    Dw2_LogEventToFlash(epoch_sec, g_app.event_counter + 1, vbat_mv, flags);
+    Dw2_LogEventToFlash(epoch_sec, g_app.event_counter + 1, vbat_mv, g_app.last_open_duration, flags);
 
     if (g_app.state == DW2_BLE_STATE_ADVERTISING_FAST || g_app.state == DW2_BLE_STATE_ADVERTISING_SAFE)
     {
@@ -236,9 +279,9 @@ static void Dw2_TriggerAdaptiveBurst(uint8_t extra_flags)
         return;
     }
 
-    Dw2_BuildAdvPacket(flags, vbat_mv, epoch_sec);
-    DW2_LOG("[DW2] Burst: open=%u cnt=%u epoch=%u vbat=%umV flags=0x%02X\r\n",
-            g_app.door_open, g_app.event_counter, epoch_sec, vbat_mv, flags);
+    Dw2_BuildAdvPacket(flags, vbat_mv, epoch_sec, g_app.last_open_duration);
+    DW2_LOG("[DW2] Burst: open=%u cnt=%u epoch=%u vbat=%umV dur=%us flags=0x%02X\r\n",
+            g_app.door_open, g_app.event_counter, epoch_sec, vbat_mv, g_app.last_open_duration, flags);
 
     Dw2_SetAdvParams(DW2_BLE_ADV_FAST_MIN, DW2_BLE_ADV_FAST_MAX, LE_HCI_ADV_TYPE_ADV_NONCONN_IND);
     LeGapSetAdvData(sizeof(g_adv_data), g_adv_data);
@@ -261,7 +304,7 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             /* Start 5-minute Connectable Time-Sync Window */
             g_app.state = DW2_BLE_STATE_CONNECTABLE_SYNC;
             Dw2_SetAdvParams(0x00A0, 0x00A0, LE_HCI_ADV_TYPE_ADV_IND);
-            Dw2_BuildAdvPacket(0U, Dw2_ReadBatteryMv(), 0U);
+            Dw2_BuildAdvPacket(0U, Dw2_ReadBatteryMv(), 0U, 0U);
             LeGapSetAdvData(sizeof(g_adv_data), g_adv_data);
 
             LeSendMessageAfter(&g_app.task, DW2_MSG_TIME_SYNC_TIMEOUT, NULL, DW2_TIME_SYNC_WINDOW_MS);
@@ -370,6 +413,25 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                 g_app.door_open = is_open;
                 g_app.door_ajar_active = 0U;
 
+                uint32_t now_epoch = Dw2_GetCurrentEpoch();
+                if (is_open)
+                {
+                    g_app.door_opened_epoch = now_epoch;
+                    g_app.last_open_duration = 0U;
+                }
+                else
+                {
+                    if (g_app.door_opened_epoch > 0 && now_epoch >= g_app.door_opened_epoch)
+                    {
+                        g_app.last_open_duration = (uint16_t)(now_epoch - g_app.door_opened_epoch);
+                    }
+                    else
+                    {
+                        g_app.last_open_duration = 0U;
+                    }
+                    g_app.door_opened_epoch = 0U;
+                }
+
                 /* Power-saving LED: only blink on door events during the first 24h */
                 if (Dw2_IsLedFeedbackAllowed())
                 {
@@ -385,8 +447,10 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
 
                 if (is_open)
                 {
-                    /* Arm Door Ajar timer (45 s) */
-                    LeSendMessageAfter(&g_app.task, DW2_MSG_DOOR_AJAR, NULL, DW2_DOOR_AJAR_TIMEOUT_MS);
+                    /* Arm Door Ajar timer (default 45s or user-configured) */
+                    uint32_t ajar_timeout_ms = (g_app.config.door_ajar_sec > 0) ?
+                        ((uint32_t)g_app.config.door_ajar_sec * 1000U) : DW2_DOOR_AJAR_TIMEOUT_MS;
+                    LeSendMessageAfter(&g_app.task, DW2_MSG_DOOR_AJAR, NULL, ajar_timeout_ms);
                 }
 
                 Dw2_TriggerAdaptiveBurst(0U);
@@ -418,6 +482,13 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                 /* Button press: 1 long blink + test/tamper burst */
                 Dw2_LedBlink(1, DW2_LED_BLINK_LONG_MS, 0);
                 Dw2_TriggerAdaptiveBurst(DW2_FLAG_BUTTON_TEST);
+
+                /* Re-open 3-minute Connectable Time-Sync & Config window */
+                g_app.state = DW2_BLE_STATE_CONNECTABLE_SYNC;
+                Dw2_SetAdvParams(0x00A0, 0x00A0, LE_HCI_ADV_TYPE_ADV_IND);
+                Dw2_BuildAdvPacket(DW2_FLAG_BUTTON_TEST, Dw2_ReadBatteryMv(), Dw2_GetCurrentEpoch(), 0U);
+                LeGapSetAdvData(sizeof(g_adv_data), g_adv_data);
+                LeSendMessageAfter(&g_app.task, DW2_MSG_TIME_SYNC_TIMEOUT, NULL, 180000U);
             }
             break;
         }
@@ -452,6 +523,8 @@ void Dw2App_Init(void)
     g_app.boot_tick = Hal_Tick_Diff(0);
     g_app.base_tick = g_app.boot_tick;
     g_app.flash_log_offset = 0;
+
+    Dw2_LoadConfig();
 
     LeHostCreateTask(&g_app.task, Dw2_TaskHandler);
     LeSendMessage(&g_app.task, DW2_MSG_INITIALIZING, NULL);

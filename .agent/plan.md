@@ -23,6 +23,14 @@ Context din mesajul inițial: inițializare repo (`docs/`, `.agent/memory-bank/`
 - [x] Pasul 5c: Validare live BLE (`88:4A:18:EA:CD:A0`, `0xFFFF` "DW", evenimente `0x00`=CLOSE / `0x01`=OPEN, monotonic counter 2->3->4->5, 3197 mV)
 - [x] Pasul 6: Scrierea permanentă în flash a firmware-ului `dw2_ble` (validat cold boot, contor 1..7)
 - [x] Pasul 7: Componentă receptor BLE pe ESP32 WROOM (`esp32_receiver/dw2_ble_receiver.hpp`, `main.cpp`, `platformio.ini`) gata pentru `smart-home-heating`
+- [ ] Pasul 8: Extindere firmware Pro:
+  - Ring buffer circular de 128 KB Flash (~10.500 evenimente)
+  - Măsurare durată deschidere (`open_duration_sec`) la închidere
+  - Master RTC Beacon (timestamp Epoch în advertising pentru refacere ceas la căderi de curent)
+  - Structură NVS parametri configurabili (Wi-Fi fallback on/off, SSID, pass, timeout ACK, ajar timeout)
+  - Profil BLE GATT pentru configurare Over-The-Air, sincronizare ceas și OTA firmware
+- [ ] Pasul 9: Creare utilitar unificat `tools/dw2_tool.py` (build, flash serial, monitor, ble-ota, ble-config, sync-time, dump-logs)
+- [ ] Pasul 10: Compilare, testare și validare finală
 
 ## Verification steps
 

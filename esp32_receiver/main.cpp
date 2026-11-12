@@ -54,7 +54,8 @@ static void onDoorEvent(const Dw2SensorEvent &ev)
     }
     else
     {
-        Serial.println("  [HEATING] FRONT DOOR CLOSED -> Resuming heating schedule.");
+        Serial.printf("  [HEATING] FRONT DOOR CLOSED (was open for %u seconds) -> Resuming heating schedule.\n",
+                      ev.open_duration_sec);
     }
 }
 

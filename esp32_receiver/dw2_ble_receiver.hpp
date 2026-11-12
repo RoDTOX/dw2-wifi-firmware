@@ -23,6 +23,8 @@
 #define DW2_FLAG_DOOR_AJAR          (1U << 3)
 #define DW2_FLAG_TIME_SYNCED        (1U << 4)
 #define DW2_FLAG_LOW_BATTERY        (1U << 5)
+#define DW2_FLAG_WIFI_FALLBACK      (1U << 6)
+#define DW2_FLAG_RTC_BEACON         (1U << 7)
 
 struct __attribute__((packed)) Dw2AdvPayloadV2
 {
@@ -33,6 +35,7 @@ struct __attribute__((packed)) Dw2AdvPayloadV2
     uint32_t event_counter;
     uint32_t epoch_sec;
     uint16_t battery_mv;
+    uint16_t open_duration_sec;
     uint8_t  bthome_id;
     uint8_t  bthome_val;
 };
@@ -46,9 +49,12 @@ struct Dw2SensorEvent
     bool          is_door_ajar;
     bool          is_time_synced;
     bool          is_low_battery;
+    bool          is_wifi_fallback;
+    bool          is_rtc_beacon;
     uint32_t      event_counter;
     uint32_t      epoch_sec;
     uint16_t      battery_mv;
+    uint16_t      open_duration_sec;
     int           rssi;
 };
 
@@ -114,17 +120,20 @@ private:
         last_counter_   = p->event_counter;
 
         Dw2SensorEvent ev;
-        ev.address        = dev->getAddress();
-        ev.is_open        = (p->flags & DW2_FLAG_DOOR_OPEN) != 0;
-        ev.is_heartbeat   = (p->flags & DW2_FLAG_HEARTBEAT) != 0;
-        ev.is_button      = (p->flags & DW2_FLAG_BUTTON_TEST) != 0;
-        ev.is_door_ajar   = (p->flags & DW2_FLAG_DOOR_AJAR) != 0;
-        ev.is_time_synced = (p->flags & DW2_FLAG_TIME_SYNCED) != 0;
-        ev.is_low_battery = (p->flags & DW2_FLAG_LOW_BATTERY) != 0;
-        ev.event_counter  = p->event_counter;
-        ev.epoch_sec      = p->epoch_sec;
-        ev.battery_mv     = p->battery_mv;
-        ev.rssi           = dev->getRSSI();
+        ev.address           = dev->getAddress();
+        ev.is_open           = (p->flags & DW2_FLAG_DOOR_OPEN) != 0;
+        ev.is_heartbeat      = (p->flags & DW2_FLAG_HEARTBEAT) != 0;
+        ev.is_button         = (p->flags & DW2_FLAG_BUTTON_TEST) != 0;
+        ev.is_door_ajar      = (p->flags & DW2_FLAG_DOOR_AJAR) != 0;
+        ev.is_time_synced    = (p->flags & DW2_FLAG_TIME_SYNCED) != 0;
+        ev.is_low_battery    = (p->flags & DW2_FLAG_LOW_BATTERY) != 0;
+        ev.is_wifi_fallback  = (p->flags & DW2_FLAG_WIFI_FALLBACK) != 0;
+        ev.is_rtc_beacon     = (p->flags & DW2_FLAG_RTC_BEACON) != 0;
+        ev.event_counter     = p->event_counter;
+        ev.epoch_sec         = p->epoch_sec;
+        ev.battery_mv        = p->battery_mv;
+        ev.open_duration_sec = p->open_duration_sec;
+        ev.rssi              = dev->getRSSI();
 
         if (callback_)
         {
