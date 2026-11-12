@@ -36,6 +36,10 @@
 /* Time synchronization window on cold boot or button long-press: 5 minutes */
 #define DW2_TIME_SYNC_WINDOW_MS     (300000U)
 
+/* Secret Magnetic Knock: 5 rapid transitions within < 1200 ms each (~3 quick open/close waves) */
+#define DW2_MAGNET_KNOCK_MAX_GAP_MS (1200U)
+#define DW2_MAGNET_KNOCK_THRESHOLD  (5U)
+
 /* BLE Adaptive Burst:
  * Phase 1: 300 ms fast burst at 20 ms interval
  * Phase 2: 500 ms safe burst at 100 ms interval

@@ -45,6 +45,7 @@ typedef struct
     uint32_t        base_tick;
     uint32_t        flash_log_offset;
     uint32_t        door_opened_epoch;
+    uint32_t        last_toggle_tick;
     uint16_t        last_open_duration;
     dw2_nv_config_t config;
     uint8_t         door_open;
@@ -52,6 +53,7 @@ typedef struct
     uint8_t         pending_burst;
     uint8_t         pending_flags;
     uint8_t         door_ajar_active;
+    uint8_t         rapid_toggle_count;
 } dw2_app_ctx_t;
 
 static dw2_app_ctx_t g_app;
@@ -412,6 +414,38 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             {
                 g_app.door_open = is_open;
                 g_app.door_ajar_active = 0U;
+
+                /* Magnetic Morse / Secret Knock detector: 5 rapid transitions within < 1200ms */
+                uint32_t current_tick = Hal_Tick_Diff(0);
+                uint32_t gap_ticks = Hal_Tick_Diff(g_app.last_toggle_tick);
+                uint32_t gap_ms = (uint32_t)((uint64_t)gap_ticks * 1000ULL / SystemCoreClockGet());
+                g_app.last_toggle_tick = current_tick;
+
+                if (gap_ms <= DW2_MAGNET_KNOCK_MAX_GAP_MS)
+                {
+                    g_app.rapid_toggle_count++;
+                }
+                else
+                {
+                    g_app.rapid_toggle_count = 1U;
+                }
+
+                if (g_app.rapid_toggle_count >= DW2_MAGNET_KNOCK_THRESHOLD)
+                {
+                    g_app.rapid_toggle_count = 0U;
+                    DW2_LOG("[DW2] SECRET MAGNETIC KNOCK! Entering OTA & Config Mode!\r\n");
+
+                    /* Visual confirmation: 5 rapid blinks */
+                    Dw2_LedBlink(5, DW2_LED_BLINK_SHORT_MS, 50);
+
+                    /* Open 3-minute Connectable OTA & Config window */
+                    g_app.state = DW2_BLE_STATE_CONNECTABLE_SYNC;
+                    Dw2_SetAdvParams(0x00A0, 0x00A0, LE_HCI_ADV_TYPE_ADV_IND);
+                    Dw2_BuildAdvPacket(DW2_FLAG_BUTTON_TEST, Dw2_ReadBatteryMv(), Dw2_GetCurrentEpoch(), 0U);
+                    LeGapSetAdvData(sizeof(g_adv_data), g_adv_data);
+                    LeSendMessageAfter(&g_app.task, DW2_MSG_TIME_SYNC_TIMEOUT, NULL, 180000U);
+                    return;
+                }
 
                 uint32_t now_epoch = Dw2_GetCurrentEpoch();
                 if (is_open)
