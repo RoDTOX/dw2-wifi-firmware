@@ -3,41 +3,43 @@
 # 🚪 Sonoff DW2-Wi-Fi — Custom BLE Firmware
 
 <p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&pause=1000&color=41BDF5&center=true&vCenter=true&width=650&lines=Sonoff+DW2-Wi-Fi+%E2%86%92+100%25+Local+BLE+Powerhouse;BTHome+V2+Auto-Discovery+%E2%80%A2+Dual-Bank+OTA;~2+Years+Battery+Life+(~30%C2%B5A+Deep+Sleep);128+KB+SPI+Flash+Blackbox+Recorder;Zero+Cloud+%E2%80%A2+Zero+eWeLink+%E2%80%A2+Instant+Speed" alt="Typing SVG" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=16&pause=1000&color=41BDF5&center=true&vCenter=true&width=580&lines=Sonoff+DW2-Wi-Fi+%E2%86%92+100%25+Local+BLE+Powerhouse;BTHome+V2+Auto-Discovery+%E2%80%A2+Dual-Bank+OTA;~2+Years+Battery+Life+(~30%C2%B5A+Deep+Sleep);128+KB+SPI+Flash+Blackbox+Flight+Recorder;Zero+Cloud+%E2%80%A2+Zero+eWeLink+%E2%80%A2+Instant+Speed" alt="Typing SVG" />
 </p>
 
-### ⚡ Liberate your sensor into a 100% local, ultra-low-power BTHome V2 powerhouse
+<p align="center">
+  <b>⚡ Liberate your sensor into a 100% local, ultra-low-power BTHome V2 powerhouse</b>
+</p>
 
-[![Firmware License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
-[![Hardware SoC](https://img.shields.io/badge/SoC-Opulinks%20OPL1000%20A2-orange.svg?style=for-the-badge&logo=arm)](https://www.opulinks.com/)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-BTHome%20V2-41BDF5.svg?style=for-the-badge&logo=homeassistant&logoColor=white)](https://bthome.io/)
-[![Battery Life](https://img.shields.io/badge/Battery-~2%20Years%20(30µA)-brightgreen.svg?style=for-the-badge&logo=battery)](https://github.com/RoDTOX/dw2-wifi-firmware)
-[![OTA Updates](https://img.shields.io/badge/OTA-Dual--Bank%20Wireless-purple.svg?style=for-the-badge&logo=bluetooth)](https://github.com/RoDTOX/dw2-wifi-firmware)
-[![Build Status](https://img.shields.io/badge/GCC%2014.2-Passing%20(0%20errors)-success.svg?style=for-the-badge&logo=gnu)](https://github.com/RoDTOX/dw2-wifi-firmware)
+<!-- Project Status & Specs (Row 1) -->
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" /></a>
+  <a href="https://www.opulinks.com/"><img src="https://img.shields.io/badge/SoC-Opulinks%20OPL1000%20A2-orange.svg?style=flat-square&logo=arm" alt="SoC" /></a>
+  <a href="https://bthome.io/"><img src="https://img.shields.io/badge/Home%20Assistant-BTHome%20V2-41BDF5.svg?style=flat-square&logo=homeassistant&logoColor=white" alt="BTHome" /></a>
+  <img src="https://img.shields.io/badge/Battery-~2%20Years%20(30µA)-brightgreen.svg?style=flat-square&logo=battery" alt="Battery" />
+  <img src="https://img.shields.io/badge/OTA-Dual--Bank%20Wireless-purple.svg?style=flat-square&logo=bluetooth" alt="OTA" />
+  <img src="https://img.shields.io/badge/GCC%2014.2-Passing%20(0%20errors)-success.svg?style=flat-square&logo=gnu" alt="Build" />
+</p>
 
-<br/>
-
-<!-- Tech Stack Tags -->
+<!-- Tech Stack Tags (Row 2) -->
 <p align="center">
   <img src="https://img.shields.io/badge/C-00599C?style=flat-square&logo=c&logoColor=white" alt="C" />
   <img src="https://img.shields.io/badge/ARM_Cortex--M3-0091BD?style=flat-square&logo=arm&logoColor=white" alt="ARM" />
   <img src="https://img.shields.io/badge/Bluetooth_LE_5.0-0082FC?style=flat-square&logo=bluetooth&logoColor=white" alt="BLE" />
   <img src="https://img.shields.io/badge/Home_Assistant-41BDF5?style=flat-square&logo=homeassistant&logoColor=white" alt="Home Assistant" />
   <img src="https://img.shields.io/badge/Python_3.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/GCC_14.2-A42E2B?style=flat-square&logo=gnu&logoColor=white" alt="GCC" />
   <img src="https://img.shields.io/badge/FreeRTOS-82BE27?style=flat-square&logo=freertos&logoColor=white" alt="FreeRTOS" />
 </p>
 
-<!-- Quick Navigation Bar -->
+<!-- Navigation Bar -->
 <p align="center">
-  <a href="#-key-features"><img src="https://img.shields.io/badge/✨_Features-21262d?style=for-the-badge&logoColor=white" alt="Features" /></a>
-  <a href="#-quick-comparison-stock-vs-custom"><img src="https://img.shields.io/badge/⚖️_Comparison-21262d?style=for-the-badge&logoColor=white" alt="Comparison" /></a>
-  <a href="#-hardware-specifications-pcb-v12"><img src="https://img.shields.io/badge/📐_Hardware-21262d?style=for-the-badge&logoColor=white" alt="Hardware" /></a>
-  <a href="#-led-feedback--hardware-button-gestures"><img src="https://img.shields.io/badge/🎛️_Gestures-21262d?style=for-the-badge&logoColor=white" alt="Gestures" /></a>
-  <a href="#-quick-start--first-time-flash"><img src="https://img.shields.io/badge/🚀_Quick_Start-21262d?style=for-the-badge&logoColor=white" alt="Quick Start" /></a>
-  <a href="#-wireless-ota-upgrades-over-ble"><img src="https://img.shields.io/badge/📡_Wireless_OTA-21262d?style=for-the-badge&logoColor=white" alt="OTA" /></a>
-  <a href="#-cli-tool-reference-toolsdw2_toolpy"><img src="https://img.shields.io/badge/🛠️_CLI_Tool-21262d?style=for-the-badge&logoColor=white" alt="CLI" /></a>
-  <a href="#-home-assistant-integration"><img src="https://img.shields.io/badge/🏠_Home_Assistant-21262d?style=for-the-badge&logoColor=white" alt="HA" /></a>
+  <a href="#-key-features">✨ <b>Features</b></a> •
+  <a href="#-quick-comparison-stock-vs-custom">⚖️ <b>Comparison</b></a> •
+  <a href="#-hardware-specifications-pcb-v12">📐 <b>Hardware</b></a> •
+  <a href="#-led-feedback--hardware-button-gestures">🎛️ <b>Gestures</b></a> •
+  <a href="#-quick-start--first-time-flash">🚀 <b>Quick Start</b></a> •
+  <a href="#-wireless-ota-upgrades-over-ble">📡 <b>Wireless OTA</b></a> •
+  <a href="#-cli-tool-reference-toolsdw2_toolpy">🛠️ <b>CLI Tool</b></a> •
+  <a href="#-home-assistant-integration">🏠 <b>Home Assistant</b></a>
 </p>
 
 ---
@@ -49,42 +51,50 @@
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h4><img src="https://img.shields.io/badge/PRIVACY-100%25%20LOCAL-success?style=flat-square" alt="Privacy" /><br/>🛡️ 100% Cloud-Free & Local</h4>
-      <p>Operates entirely within your local Bluetooth perimeter. <b>Zero eWeLink accounts</b>, zero cloud servers, and zero internet dependency. Eliminates Wi-Fi pairing dropouts and vendor lock-in forever.</p>
+      <img src="https://img.shields.io/badge/PRIVACY-100%25%20LOCAL-success?style=flat-square" alt="Privacy" /><br/>
+      <b>🛡️ 100% Cloud-Free & Local</b><br/>
+      Operates entirely within your local Bluetooth perimeter. <b>Zero eWeLink accounts</b>, zero cloud servers, and zero internet dependency. Eliminates Wi-Fi pairing dropouts and vendor lock-in forever.
     </td>
     <td width="50%" valign="top">
-      <h4><img src="https://img.shields.io/badge/BATTERY-~2%20YEARS-brightgreen?style=flat-square" alt="Battery" /><br/>🔋 Extreme Battery Runtime</h4>
-      <p>Wi-Fi radio is permanently switched off in firmware. Deep sleep runs at <b>~30 µA</b> via hardware <code>ps_smart_sleep</code> and 32.768 kHz RTC compensation, delivering <b>~2 years of life</b> on standard AAA cells.</p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h4><img src="https://img.shields.io/badge/INTEGRATION-BTHOME%20V2-blue?style=flat-square" alt="BTHome" /><br/>🏠 Native BTHome V2 Auto-Discovery</h4>
-      <p>Broadcasts standard <b>BTHome V2 Door objects (<code>0x1A</code>)</b>. Instantly auto-discovered by <b>Home Assistant</b>, <b>ESPHome BLE Proxies</b>, and <b>Shelly BLU</b> gateways with zero manual YAML.</p>
-    </td>
-    <td width="50%" valign="top">
-      <h4><img src="https://img.shields.io/badge/FIRMWARE-DUAL--BANK%20OTA-purple?style=flat-square" alt="OTA" /><br/>📡 Fail-Safe Wireless BLE OTA</h4>
-      <p>True wireless firmware upgrades over Bluetooth GATT (<code>0xAAAA</code>). Dual-Bank architecture toggles between <b>Bank 0</b> and <b>Bank 1</b> with full CRC validation and automatic fallback if interrupted.</p>
+      <img src="https://img.shields.io/badge/BATTERY-~2%20YEARS-brightgreen?style=flat-square" alt="Battery" /><br/>
+      <b>🔋 Extreme Battery Runtime</b><br/>
+      Wi-Fi radio is permanently switched off in firmware. Deep sleep runs at <b>~30 µA</b> via hardware <code>ps_smart_sleep</code> and 32.768 kHz RTC compensation, delivering <b>~2 years of life</b> on standard AAA cells.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h4><img src="https://img.shields.io/badge/TELEMETRY-AJAR%20ALERT-red?style=flat-square" alt="Telemetry" /><br/>⏱️ Open Duration & Ajar Warning</h4>
-      <p>Measures exact open duration in seconds and emits <code>was_open_Xs</code> upon closing. If left open <b>> 45 seconds</b>, emits a dedicated high-priority ajar alert every 15s to prevent energy waste.</p>
+      <img src="https://img.shields.io/badge/INTEGRATION-BTHOME%20V2-blue?style=flat-square" alt="BTHome" /><br/>
+      <b>🏠 Native BTHome V2 Auto-Discovery</b><br/>
+      Broadcasts standard <b>BTHome V2 Door objects (<code>0x1A</code>)</b>. Instantly auto-discovered by <b>Home Assistant</b>, <b>ESPHome BLE Proxies</b>, and <b>Shelly BLU</b> gateways with zero manual YAML.
     </td>
     <td width="50%" valign="top">
-      <h4><img src="https://img.shields.io/badge/STORAGE-128%20KB%20FLASH-orange?style=flat-square" alt="Storage" /><br/>💾 128 KB Flash Blackbox Recorder</h4>
-      <p>Dedicated on-chip SPI Flash circular log stores up to <b>8,192 historical events</b> with timestamps, battery mV, and flags. <b>Survives battery swaps</b> and dumps to CSV via CLI in ~0.5s via binary search.</p>
+      <img src="https://img.shields.io/badge/FIRMWARE-DUAL--BANK%20OTA-purple?style=flat-square" alt="OTA" /><br/>
+      <b>📡 Fail-Safe Wireless BLE OTA</b><br/>
+      True wireless firmware upgrades over Bluetooth GATT (<code>0xAAAA</code>). Dual-Bank architecture toggles between <b>Bank 0</b> and <b>Bank 1</b> with full CRC validation and automatic fallback if interrupted.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h4><img src="https://img.shields.io/badge/HARDWARE-MULTI--TIER%20S1-blueviolet?style=flat-square" alt="Button" /><br/>🎛️ Multi-Tier Physical Button Actions</h4>
-      <p>The onboard <code>S1</code> button serves multiple roles: <b>&lt; 5s</b> opens OTA mode, <b>8–10s</b> executes SoC Hard Reboot, and <b>≥ 15s</b> executes a complete factory format of the blackbox flash memory.</p>
+      <img src="https://img.shields.io/badge/TELEMETRY-AJAR%20ALERT-red?style=flat-square" alt="Telemetry" /><br/>
+      <b>⏱️ Open Duration & Ajar Warning</b><br/>
+      Measures exact open duration in seconds and emits <code>was_open_Xs</code> upon closing. If left open <b>> 45 seconds</b>, emits a dedicated high-priority ajar alert every 15s to prevent energy waste.
     </td>
     <td width="50%" valign="top">
-      <h4><img src="https://img.shields.io/badge/IDENTITY-DYNAMIC%20MAC-informational?style=flat-square" alt="Identity" /><br/>🏷️ Unique Case-Matched BLE Name</h4>
-      <p>Advertises dynamically as <b><code>DW2-XXXX</code></b> (e.g. <code>DW2-CDA0</code>) using the device's hardware factory MAC address, perfectly matching the serial sticker printed on the outer plastic casing.</p>
+      <img src="https://img.shields.io/badge/STORAGE-128%20KB%20FLASH-orange?style=flat-square" alt="Storage" /><br/>
+      <b>💾 128 KB Flash Blackbox Recorder</b><br/>
+      Dedicated on-chip SPI Flash circular log stores up to <b>8,192 historical events</b> with timestamps, battery mV, and flags. <b>Survives battery swaps</b> and dumps to CSV via CLI in ~0.5s via binary search.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="https://img.shields.io/badge/HARDWARE-MULTI--TIER%20S1-blueviolet?style=flat-square" alt="Button" /><br/>
+      <b>🎛️ Multi-Tier Physical Button Actions</b><br/>
+      The onboard <code>S1</code> button serves multiple roles: <b>&lt; 5s</b> opens OTA mode, <b>8–10s</b> executes SoC Hard Reboot, and <b>≥ 15s</b> executes a complete factory format of the blackbox flash memory.
+    </td>
+    <td width="50%" valign="top">
+      <img src="https://img.shields.io/badge/IDENTITY-DYNAMIC%20MAC-informational?style=flat-square" alt="Identity" /><br/>
+      <b>🏷️ Unique Case-Matched BLE Name</b><br/>
+      Advertises dynamically as <b><code>DW2-XXXX</code></b> (e.g. <code>DW2-CDA0</code>) using the device's hardware factory MAC address, perfectly matching the serial sticker printed on the outer plastic casing.
     </td>
   </tr>
 </table>
