@@ -12,4 +12,7 @@
 - **CTS Real-Time Sync**: Added standard BLE Current Time Service (0x1805 / 0x2A2B) and epoch conversion; mobile phones and CLI can set authoritative sensor time.
 - **BLE SMP Just Works**: Configured `LE_SM_IO_CAP_NO_IO` to eliminate "Incorrect PIN" popups on smartphones.
 - **Immediate Connectable Advertising**: Fixed `Dw2_EnterConnectableMode` to explicitly start advertising (`LeGapAdvertisingEnable(TRUE)`) immediately upon S1 press or 5 magnet flicks.
-- **CLI Ergonomics**: Updated `dw2_tool.py dump-logs` to scan for device with a 15-second discovery window and default to fetching the last 20 entries with `--count` and `--all` options.
+- **Claude Code Strict Firmware Audit**: Audited `firmware/src/` with Claude Code CLI (v2.1.322); eliminated boot sequence re-entry (`g_app.initialized`), restored monotonic event counters across reboots (`Dw2_FlashLog_GetLastCounter`), hardened buffer bounds in `Dw2_Ota_SendResponse`, and sanitized 32-bit shift operations.
+- **Unique Hardware BLE Name**: Derived local Bluetooth name dynamically from chip MAC (`DW2-%02X%02X`, e.g. `DW2-CDA0`), matching casing stickers.
+- **ADC Calibration & Battery Telemetry**: Fixed AuxADC measurement via `Hal_Aux_AdcCal_Init()` OTP calibration and internal `Hal_Aux_VbatGet()`.
+- **CLI Ergonomics**: Extended scan timeouts to 35s with live countdown and interactive user hints.

@@ -31,3 +31,13 @@
 
 - **Decision:** Default `dw2_tool.py dump-logs` to fetching the most recent 20 events with `--count` and `--all` options, and implement a 15-second BLE discovery scan window.
 - **Rationale:** Downloading all 8,192 entries from the 128 KB SPI Flash circular ring buffer takes excessive time over BLE. Fast dump delivers immediate forensic feedback for routine checks.
+
+## ADR-007: Dynamic Hardware MAC-Based BLE Local Name
+
+- **Decision:** Form the BLE Complete Local Name dynamically as `DW2-%02X%02X` (e.g. `DW2-CDA0`) using the last two octets of the device MAC address read via `LeGapGetBdAddr()`.
+- **Rationale:** Prevents collisions when multiple DW2 sensors are active and matches the physical identifier printed on the casing and product packaging.
+
+## ADR-008: Boot Idempotence & Monotonic Counter Recovery (Claude Audit)
+
+- **Decision:** Guard the cold boot sequence in `Dw2_CmMsgHandler` with `g_app.initialized` and resume `g_app.event_counter` from the latest valid SPI Flash log entry (`Dw2_FlashLog_GetLastCounter()`).
+- **Rationale:** Discovered during Claude Code static audit; BLE advertising parameter re-configuration after disconnection re-triggered the boot branch, causing duplicate heartbeat timers and spurious LED blinks. Resuming the event counter ensures monotonic sequence continuity across battery swaps and warm boots.
