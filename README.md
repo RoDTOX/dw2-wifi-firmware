@@ -103,7 +103,11 @@ Once the Dual-Bank bootloader is installed, you never need serial cables again.
 
 ### How to Trigger Maintenance Mode (3-minute connectable window):
 - **Option A (Secret Knock):** Rapidly flick/tap the magnet against the sensor **5 times** within 2.5 seconds.
-- **Option B (Hardware Button):** Press the `S1` button on the side of the sensor once.
+### Multi-Tier Hardware Button (S1) Actions:
+- **Short Press (< 5s):** Enters 3-minute Connectable OTA & Maintenance mode (LED blinks 5 times).
+- **Long Press (8–10s):** **Hard Reboot / SoC Reset** (LED blinks once at 8s cue, then 10 rapid blinks upon release followed by hardware reboot).
+- **Very Long Press (≥ 15s):** **Factory Reset / Format Blackbox** (LED stays solid at 15s cue; upon release, erases all 128 KB SPI Flash log sectors, resets event counter to 0, and reboots).
+- *Dead Zones (5–8s & 10–15s):* Release within these windows safely aborts without taking any destructive action.
 - *Feedback:* The LED blinks **5 times rapidly** to confirm that the BLE GATT service (`0xAAAA`) is listening.
 
 ### Performing the Upgrade:
