@@ -18,6 +18,7 @@
 
 #include "cmsis_os.h"
 #include "hal_auxadc.h"
+#include "hal_auxadc_patch.h"
 #include "hal_pin.h"
 #include "hal_pin_def.h"
 #include "hal_vic.h"
@@ -127,23 +128,35 @@ static void Dw2_LedBlink(uint8_t count, uint32_t on_ms, uint32_t off_ms)
 }
 
 /**
- * @brief Measure battery voltage in millivolts via AuxADC on DW2_BATTERY_IO_PORT.
+ * @brief Measure battery voltage in millivolts via AuxADC internal VBAT and calibration.
  */
 static uint16_t Dw2_ReadBatteryMv(void)
 {
     float vbat = 0.0f;
+    uint8_t ret;
 
+    Hal_Aux_AdcCal_Init();
+
+    /* 1. Primary: Measure true internal VBAT supply rail of the SoC */
+    ret = Hal_Aux_VbatGet(&vbat);
+    if (ret == HAL_AUX_OK && vbat >= 1.5f && vbat <= 3.8f)
+    {
+        return (uint16_t)(vbat * 1000.0f + 0.5f);
+    }
+
+    /* 2. Fallback: Measure through external battery divider on GPIO 2 */
     g_ulHalAux_AverageCount = DW2_VBAT_AVG_COUNT;
-    Hal_Pin_ConfigSet(DW2_BATTERY_IO_PORT, PIN_TYPE_GPIO_OUTPUT_HIGH, PIN_DRIVING_FLOAT);
+    Hal_Pin_ConfigSet(DW2_BATTERY_IO_PORT, PIN_TYPE_GPIO_INPUT, PIN_DRIVING_FLOAT);
     osDelay(3);
-    Hal_Aux_IoVoltageGet(DW2_BATTERY_IO_PORT, &vbat);
+    ret = Hal_Aux_IoVoltageGet(DW2_BATTERY_IO_PORT, &vbat);
     Hal_Pin_ConfigSet(DW2_BATTERY_IO_PORT, PIN_TYPE_NONE, PIN_DRIVING_FLOAT);
 
-    if (vbat < 0.0f)
+    if (ret == HAL_AUX_OK && vbat >= 1.5f && vbat <= 3.8f)
     {
-        return 0U;
+        return (uint16_t)(vbat * 1000.0f + 0.5f);
     }
-    return (uint16_t)(vbat * 1000.0f + 0.5f);
+
+    return 3000U;
 }
 
 /**

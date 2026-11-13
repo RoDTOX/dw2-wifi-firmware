@@ -10,6 +10,7 @@
 #include "sys_init_patch.h"
 #include "hal_system.h"
 #include "hal_auxadc.h"
+#include "hal_auxadc_patch.h"
 #include "hal_pin.h"
 #include "hal_pin_def.h"
 #include "hal_pin_config_project.h"
@@ -89,6 +90,8 @@ static void Main_MiscModulesInit(void)
 static void Main_MiscDriverConfigSetup(void)
 {
     Hal_Aux_Init();
+    Hal_Aux_PatchInit();
+    Hal_Aux_AdcCal_Init();
 
     if (0 == Boot_CheckWarmBoot())
     {
