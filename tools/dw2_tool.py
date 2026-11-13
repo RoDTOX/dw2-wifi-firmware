@@ -322,6 +322,59 @@ def encap_pkt(cmd_type, payload=b""):
     return struct.pack("<HH", cmd_type, len(payload)) + payload
 
 
+async def find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5):
+    """
+    Scans for sensor with real-time feedback:
+    - If sensor is sleeping, shows helpful wake tips after tip_after seconds.
+    - Shows live scanning timer countdown.
+    - Returns (device, is_connectable).
+    """
+    device = None
+    adv_data_saved = None
+    stop_event = asyncio.Event()
+
+    def detection_callback(dev, adv):
+        nonlocal device, adv_data_saved
+        if dev.address.upper() == target_mac.upper():
+            device = dev
+            adv_data_saved = adv
+            stop_event.set()
+
+    scanner = BleakScanner(detection_callback=detection_callback)
+    await scanner.start()
+    tip_shown = False
+    start_t = time.time()
+    try:
+        while (time.time() - start_t) < timeout:
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=0.5)
+                break
+            except asyncio.TimeoutError:
+                elapsed = int(time.time() - start_t)
+                if elapsed >= tip_after and not tip_shown:
+                    print("\n      [TIP] Sensor appears to be asleep (no BLE radio signal yet).")
+                    print("            -> Press button S1 to wake it directly into Maintenance Mode (or move magnet)!")
+                    tip_shown = True
+                elif tip_shown:
+                    rem = int(timeout - elapsed)
+                    print(f"\r      Listening for BLE broadcast... ({elapsed}s/{int(timeout)}s, {rem}s remaining)", end="", flush=True)
+    finally:
+        await scanner.stop()
+
+    if tip_shown:
+        print()
+
+    if not device:
+        return None, False
+
+    is_conn = False
+    if adv_data_saved:
+        if adv_data_saved.local_name == "DW2":
+            is_conn = True
+
+    return device, is_conn
+
+
 async def run_ota(firmware_path, target_mac="88:4A:18:EA:CD:A0", chunk_size=128, rx_pkt_ack=4):
     """Performs Over-The-Air (OTA) firmware upgrade over BLE."""
     if not os.path.isfile(firmware_path):
@@ -354,14 +407,16 @@ async def run_ota(firmware_path, target_mac="88:4A:18:EA:CD:A0", chunk_size=128,
             last_response["data"] = payload
             ack_event.set()
 
-    print(f"[OTA] Scanning for device {target_mac}...")
-    device = await BleakScanner.find_device_by_address(target_mac, timeout=10.0)
+    print(f"[OTA] Scanning for device {target_mac} (up to 15s)...")
+    device, is_conn = await find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5)
     if not device:
         print(f"[ERROR] Device {target_mac} not detected!")
         print("        Please perform SECRET KNOCK (5 magnet flicks) or PRESS BUTTON S1 to enter OTA mode.")
         return 1
 
     print(f"[OTA] Found device {device.name or target_mac} ({device.address}). Connecting...")
+    if not is_conn:
+        print("      Tip: Sensor is not in Maintenance Mode! Press button S1 or flick magnet 5 times NOW.")
     try:
         async with BleakClient(device, timeout=15.0) as client:
             if not client.is_connected:
@@ -469,10 +524,17 @@ async def run_sync_time(target_mac="88:4A:18:EA:CD:A0"):
     print(f"=== [DW2 TIME SYNC] Syncing RTC time to {target_mac} ===")
     print(f"  Current Epoch: {current_epoch} ({datetime.fromtimestamp(current_epoch).strftime('%Y-%m-%d %H:%M:%S')})")
 
-    device = await BleakScanner.find_device_by_address(target_mac, timeout=8.0)
+    device, is_conn = await find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5)
     if not device:
         print(f"[ERROR] Device {target_mac} not detected! Open 3-min window via S1 or 5 magnet flicks.")
         return 1
+
+    rssi_val = getattr(device, "rssi", None)
+    rssi_str = f"{rssi_val} dBm" if rssi_val is not None else "detected"
+    print(f"  Found sensor! ({rssi_str})")
+    print("  Connecting to BLE GATT server...")
+    if not is_conn:
+        print("  Tip: Press button S1 or flick magnet 5 times NOW to enter connectable mode.")
 
     ack_event = asyncio.Event()
 
@@ -507,17 +569,23 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None, count=20, 
     print(f"=== [DW2 LOG DUMP] Target: {target_mac} ({limit_str} entries) ===")
     print("[1/4] Scanning for sensor BLE advertisement (up to 15s)...")
 
-    device = await BleakScanner.find_device_by_address(target_mac, timeout=15.0)
+    device, is_conn = await find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5)
     if not device:
         print(f"\n[ERROR] Device {target_mac} not detected within 15 seconds!")
-        print("        Ensure battery is inserted and sensor is awake.")
+        print("        Ensure battery is inserted, then press button S1 to wake.")
         return 1
 
     rssi_val = getattr(device, "rssi", None)
     rssi_str = f"{rssi_val} dBm" if rssi_val is not None else "detected"
-    print(f"\n[2/4] Found sensor! ({rssi_str})")
+    mode_str = "Maintenance Mode (Connectable)" if is_conn else "Door Broadcast (Non-Connectable)"
+    print(f"\n[2/4] Found sensor: {mode_str} (RSSI: {rssi_str})")
+
     print("[3/4] Connecting to BLE GATT server...")
-    print("      Tip: If sensor is not already in maintenance mode, press button S1 or flick magnet 5 times now!")
+    if not is_conn:
+        print("      [ATTENTION] Sensor was detected via door broadcast, NOT in maintenance mode!")
+        print("                  -> Press button S1 or flick magnet 5 times NOW so connection can succeed!")
+    else:
+        print("      Sensor is ready for connection.")
 
     received_batch = []
     is_end_of_log = False
