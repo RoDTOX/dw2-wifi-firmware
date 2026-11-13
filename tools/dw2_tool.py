@@ -555,6 +555,8 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None, count=20, 
             current_epoch = int(datetime.now().timestamp())
             try:
                 await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_TIME_SYNC, struct.pack("<I", current_epoch)), response=False)
+                t_str = datetime.fromtimestamp(current_epoch).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"      [TIME] Synced sensor RTC clock to host PC: {t_str}")
             except Exception:
                 pass
 
