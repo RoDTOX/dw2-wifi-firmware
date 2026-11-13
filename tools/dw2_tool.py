@@ -452,7 +452,14 @@ async def run_ota(firmware_path, target_mac="88:4A:18:EA:CD:A0", chunk_size=128,
                 return 0
 
     except Exception as e:
-        print(f"[ERROR] OTA failure: {type(e).__name__}: {e}")
+        err_type = type(e).__name__
+        err_text = str(e).strip()
+        if isinstance(e, (asyncio.TimeoutError, TimeoutError)) or "timeout" in err_type.lower() or not err_text:
+            print("\n[ERROR] Connection timed out!")
+            print("        The sensor was in non-connectable broadcast mode or asleep.")
+            print("        Tip: Press button S1 or do 5 rapid magnet flicks before initiating OTA.")
+        else:
+            print(f"\n[ERROR] OTA failure ({err_type}): {err_text}")
         return 1
 
 
@@ -484,7 +491,13 @@ async def run_sync_time(target_mac="88:4A:18:EA:CD:A0"):
             print("[SUCCESS] Time synchronized successfully!")
             return 0
     except Exception as e:
-        print(f"[ERROR] Time sync failed: {type(e).__name__}: {e}")
+        err_type = type(e).__name__
+        err_text = str(e).strip()
+        if isinstance(e, (asyncio.TimeoutError, TimeoutError)) or "timeout" in err_type.lower() or not err_text:
+            print("\n[ERROR] Connection timed out!")
+            print("        Tip: Press button S1 or do 5 rapid magnet flicks to enter connectable mode.")
+        else:
+            print(f"\n[ERROR] Time sync failed ({err_type}): {err_text}")
         return 1
 
 
@@ -493,18 +506,18 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None, count=20, 
     limit_str = "ALL" if dump_all else f"last {count}"
     print(f"=== [DW2 LOG DUMP] Target: {target_mac} ({limit_str} entries) ===")
     print("[1/4] Scanning for sensor BLE advertisement (up to 15s)...")
-    print("      Tip: Press button S1 or flick the magnet 5 times now to wake sensor.")
 
     device = await BleakScanner.find_device_by_address(target_mac, timeout=15.0)
     if not device:
         print(f"\n[ERROR] Device {target_mac} not detected within 15 seconds!")
-        print("        Ensure battery is inserted and button S1 was pressed.")
+        print("        Ensure battery is inserted and sensor is awake.")
         return 1
 
     rssi_val = getattr(device, "rssi", None)
     rssi_str = f"{rssi_val} dBm" if rssi_val is not None else "detected"
     print(f"\n[2/4] Found sensor! ({rssi_str})")
     print("[3/4] Connecting to BLE GATT server...")
+    print("      Tip: If sensor is not already in maintenance mode, press button S1 or flick magnet 5 times now!")
 
     received_batch = []
     is_end_of_log = False
@@ -621,7 +634,14 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None, count=20, 
                 print(f"\n[EXPORT] Saved {len(all_entries)} entries to CSV: {out_csv}")
             return 0
     except Exception as e:
-        print(f"\n[ERROR] Log dump failed: {type(e).__name__}: {e}")
+        err_type = type(e).__name__
+        err_text = str(e).strip()
+        if isinstance(e, (asyncio.TimeoutError, TimeoutError)) or "timeout" in err_type.lower() or not err_text:
+            print("\n[ERROR] Connection timed out!")
+            print("        The sensor was in non-connectable broadcast mode or asleep.")
+            print("        Tip: Press button S1 or do 5 rapid magnet flicks to enter connectable mode.")
+        else:
+            print(f"\n[ERROR] Log dump failed ({err_type}): {err_text}")
         return 1
 
 
