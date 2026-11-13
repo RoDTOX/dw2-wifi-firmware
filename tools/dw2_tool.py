@@ -491,82 +491,137 @@ async def run_sync_time(target_mac="88:4A:18:EA:CD:A0"):
 async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None, count=20, dump_all=False):
     """Downloads blackbox logs from DW2 sensor over BLE (default: last 20 entries)."""
     limit_str = "ALL" if dump_all else f"last {count}"
-    print(f"=== [DW2 LOG DUMP] Waiting for {target_mac} ({limit_str} entries) ===")
-    print("    Tip: You can press button S1 or flick the magnet 5 times now...")
+    print(f"=== [DW2 LOG DUMP] Target: {target_mac} ({limit_str} entries) ===")
+    print("[1/4] Scanning for sensor BLE advertisement (up to 15s)...")
+    print("      Tip: Press button S1 or flick the magnet 5 times now to wake sensor.")
 
     device = await BleakScanner.find_device_by_address(target_mac, timeout=15.0)
     if not device:
-        print(f"[ERROR] Device {target_mac} not detected! Press button S1 or do 5 magnet flicks.")
+        print(f"\n[ERROR] Device {target_mac} not detected within 15 seconds!")
+        print("        Ensure battery is inserted and button S1 was pressed.")
         return 1
 
-    entries = []
-    dump_finished = asyncio.Event()
+    rssi_val = getattr(device, "rssi", None)
+    rssi_str = f"{rssi_val} dBm" if rssi_val is not None else "detected"
+    print(f"\n[2/4] Found sensor! ({rssi_str})")
+    print("[3/4] Connecting to BLE GATT server...")
+
+    received_batch = []
+    is_end_of_log = False
+    dump_event = asyncio.Event()
 
     def notification_handler(sender, data):
+        nonlocal received_batch, is_end_of_log
         if len(data) >= 4:
             resp_type, resp_len = struct.unpack("<HH", data[:4])
             if resp_type == RSP_LOG_DUMP:
                 payload = data[4:4 + resp_len]
                 if payload == b"\xFF\xFF" or len(payload) == 0:
-                    dump_finished.set()
+                    is_end_of_log = True
+                    dump_event.set()
                     return
-                # Each entry is 16 bytes: epoch(4) cnt(4) vbat(2) duration(2) flags(1) rsvd(2) csum(1)
                 for i in range(0, len(payload), 16):
                     chunk = payload[i:i + 16]
                     if len(chunk) == 16:
                         epoch, cnt, vbat, dur, flags, _, csum = struct.unpack("<IIHHB2sB", chunk)
-                        entries.append({
+                        received_batch.append({
                             "epoch": epoch,
                             "counter": cnt,
                             "vbat_mv": vbat,
                             "duration_sec": dur,
                             "flags": flags,
                         })
-                dump_finished.set()
+                dump_event.set()
 
     try:
         async with BleakClient(device, timeout=15.0) as client:
+            print("      Connected! Negotiating MTU and enabling notifications...")
             await client.start_notify(OTA_CHAR_DATA_OUT, notification_handler)
 
-            current_idx = 0
-            while True:
-                dump_finished.clear()
-                req_payload = struct.pack("<I", current_idx)
+            # Auto-sync real-time clock to sensor
+            current_epoch = int(datetime.now().timestamp())
+            try:
+                await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_TIME_SYNC, struct.pack("<I", current_epoch)), response=False)
+            except Exception:
+                pass
+
+            async def fetch_block(idx, timeout=2.0):
+                nonlocal received_batch, is_end_of_log
+                received_batch = []
+                is_end_of_log = False
+                dump_event.clear()
+                req_payload = struct.pack("<I", idx)
                 await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_LOG_DUMP, req_payload), response=False)
                 try:
-                    await asyncio.wait_for(dump_finished.wait(), timeout=5.0)
+                    await asyncio.wait_for(dump_event.wait(), timeout=timeout)
                 except asyncio.TimeoutError:
+                    return False, []
+                if is_end_of_log or not received_batch:
+                    return False, []
+                return True, received_batch
+
+            print("[4/4] Locating blackbox boundary in 128 KB SPI Flash...")
+
+            # Quick check if flash has any logs at all
+            has_logs, first_batch = await fetch_block(0)
+            if not has_logs:
+                print("[INFO] Flash blackbox is completely empty (0 entries).")
+                return 0
+
+            # Binary search to pinpoint total number of logged events (0 to 8192)
+            low = 0
+            high = 8192
+            while low < high:
+                mid = (low + high) // 2
+                ok, _ = await fetch_block(mid)
+                if ok:
+                    low = mid + 1
+                else:
+                    high = mid
+            total_entries = low
+            print(f"      Located {total_entries} total logged events in Flash!")
+
+            # Determine slice range
+            if dump_all:
+                start_idx = 0
+                fetch_count = total_entries
+            else:
+                start_idx = max(0, total_entries - count)
+                fetch_count = total_entries - start_idx
+
+            print(f"      Downloading {fetch_count} entries (indices #{start_idx} to #{total_entries - 1})...")
+
+            all_entries = []
+            curr_idx = start_idx
+            while curr_idx < total_entries:
+                ok, batch = await fetch_block(curr_idx)
+                if not ok or not batch:
                     break
+                all_entries.extend(batch)
+                curr_idx += len(batch)
+                pct = int((len(all_entries) / fetch_count) * 100) if fetch_count > 0 else 100
+                print(f"\r      Progress: {len(all_entries)}/{fetch_count} entries ({pct}%)", end="", flush=True)
 
-                if len(entries) <= current_idx:
-                    break
-                current_idx = len(entries)
-                if dump_all:
-                    print(f"\r  Retrieved {len(entries)} log entries...", end="", flush=True)
-
-            # If not dumping all, keep only the requested most recent entries
-            display_entries = entries if dump_all else entries[-count:]
-
-            print(f"\n[SUCCESS] Retrieved {len(entries)} total entries (displaying {len(display_entries)})!")
-            if display_entries:
-                print(f"\n{'Index':<6} {'Timestamp':<20} {'Counter':<8} {'State':<8} {'Duration':<10} {'Battery':<8} {'Flags'}")
-                print("-" * 75)
-                for idx, e in enumerate(display_entries):
+            print(f"\n\n[SUCCESS] Retrieved {len(all_entries)} log entries from 128 KB Flash!")
+            if all_entries:
+                print(f"\n{'#':<4} {'Index':<8} {'Timestamp':<20} {'Counter':<9} {'State':<8} {'Duration':<10} {'Battery':<8} {'Flags'}")
+                print("-" * 80)
+                for rel_idx, e in enumerate(all_entries):
+                    abs_idx = start_idx + rel_idx
                     t_str = datetime.fromtimestamp(e["epoch"]).strftime("%Y-%m-%d %H:%M:%S") if e["epoch"] > 0 else "Unsynced"
                     state_str = "OPEN" if (e["flags"] & FLAG_DOOR_OPEN) else "CLOSED"
-                    print(f"{idx:<6} {t_str:<20} #{e['counter']:<7} {state_str:<8} {e['duration_sec']:<8}s {e['vbat_mv']:<6}mV 0x{e['flags']:02X}")
+                    print(f"{rel_idx + 1:<4} [#{abs_idx:<5}] {t_str:<20} #{e['counter']:<8} {state_str:<8} {e['duration_sec']:<8}s {e['vbat_mv']:<6}mV 0x{e['flags']:02X}")
 
-            if out_csv and entries:
+            if out_csv and all_entries:
                 import csv
-                csv_records = entries if dump_all else display_entries
                 with open(out_csv, "w", newline="", encoding="utf-8") as f:
                     writer = csv.DictWriter(f, fieldnames=["epoch", "counter", "vbat_mv", "duration_sec", "flags"])
                     writer.writeheader()
-                    writer.writerows(csv_records)
-                print(f"[SUCCESS] Exported log history to: {out_csv}")
+                    writer.writerows(all_entries)
+                print(f"\n[EXPORT] Saved {len(all_entries)} entries to CSV: {out_csv}")
             return 0
     except Exception as e:
-        print(f"[ERROR] Log dump failed: {type(e).__name__}: {e}")
+        print(f"\n[ERROR] Log dump failed: {type(e).__name__}: {e}")
         return 1
 
 
