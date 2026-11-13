@@ -322,7 +322,7 @@ def encap_pkt(cmd_type, payload=b""):
     return struct.pack("<HH", cmd_type, len(payload)) + payload
 
 
-async def find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5):
+async def find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0):
     """
     Scans for sensor with real-time feedback:
     - If sensor is sleeping, shows helpful wake tips after tip_after seconds.
@@ -407,8 +407,8 @@ async def run_ota(firmware_path, target_mac="88:4A:18:EA:CD:A0", chunk_size=128,
             last_response["data"] = payload
             ack_event.set()
 
-    print(f"[OTA] Scanning for device {target_mac} (up to 15s)...")
-    device, is_conn = await find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5)
+    print(f"[OTA] Scanning for device {target_mac} (up to 35s)...")
+    device, is_conn = await find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0)
     if not device:
         print(f"[ERROR] Device {target_mac} not detected!")
         print("        Please perform SECRET KNOCK (5 magnet flicks) or PRESS BUTTON S1 to enter OTA mode.")
@@ -524,7 +524,7 @@ async def run_sync_time(target_mac="88:4A:18:EA:CD:A0"):
     print(f"=== [DW2 TIME SYNC] Syncing RTC time to {target_mac} ===")
     print(f"  Current Epoch: {current_epoch} ({datetime.fromtimestamp(current_epoch).strftime('%Y-%m-%d %H:%M:%S')})")
 
-    device, is_conn = await find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5)
+    device, is_conn = await find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0)
     if not device:
         print(f"[ERROR] Device {target_mac} not detected! Open 3-min window via S1 or 5 magnet flicks.")
         return 1
@@ -567,11 +567,11 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None, count=20, 
     """Downloads blackbox logs from DW2 sensor over BLE (default: last 20 entries)."""
     limit_str = "ALL" if dump_all else f"last {count}"
     print(f"=== [DW2 LOG DUMP] Target: {target_mac} ({limit_str} entries) ===")
-    print("[1/4] Scanning for sensor BLE advertisement (up to 15s)...")
+    print("[1/4] Scanning for sensor BLE advertisement (up to 35s)...")
 
-    device, is_conn = await find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5)
+    device, is_conn = await find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0)
     if not device:
-        print(f"\n[ERROR] Device {target_mac} not detected within 15 seconds!")
+        print(f"\n[ERROR] Device {target_mac} not detected within 35 seconds!")
         print("        Ensure battery is inserted, then press button S1 to wake.")
         return 1
 
