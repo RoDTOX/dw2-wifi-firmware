@@ -27,6 +27,7 @@
 #include "ble_gap_if.h"
 #include "ble_gatt_if.h"
 #include "ble_hci_if.h"
+#include "ble_smp_if.h"
 #include "ble_util.h"
 #include "msg.h"
 
@@ -72,12 +73,15 @@ static const uint8_t g_scan_rsp_data[] =
     'D', 'W', '2'
 };
 
-static uint32_t g_sync_systick = 0;
+extern uint32_t xTaskGetTickCount(void);
+
+static uint32_t g_sync_tick = 0;
+static uint32_t g_door_open_tick = 0;
 
 void Dw2_SetEpochSec(uint32_t epoch)
 {
     g_app.base_epoch_sec = epoch;
-    g_sync_systick = osKernelSysTick();
+    g_sync_tick = xTaskGetTickCount();
 }
 
 static uint32_t Dw2_GetCurrentEpochSec(void)
@@ -86,8 +90,8 @@ static uint32_t Dw2_GetCurrentEpochSec(void)
     {
         return 0;
     }
-    uint32_t elapsed_ticks = osKernelSysTick() - g_sync_systick;
-    return g_app.base_epoch_sec + (elapsed_ticks / osKernelSysTickFrequency);
+    uint32_t elapsed_ms = xTaskGetTickCount() - g_sync_tick;
+    return g_app.base_epoch_sec + (elapsed_ms / 1000U);
 }
 
 /**
@@ -292,6 +296,7 @@ static void Dw2_EnterConnectableMode(void)
     {
         g_app.state = DW2_BLE_STATE_CONNECTABLE;
         Dw2_SetAdvParams(LE_HCI_ADV_TYPE_ADV_IND);
+        LeGapAdvertisingEnable(TRUE);
     }
 
     LeSendMessageAfter(&g_app.task, DW2_MSG_CONNECTABLE_TIMEOUT, NULL, DW2_BLE_CONNECTABLE_TIMEOUT_MS);
@@ -307,6 +312,8 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
         {
             DW2_LOG("[DW2] BLE Init OK\r\n");
             Dw2_Ota_Init(&g_app.task);
+            LeSmpInit(&g_app.task);
+            LeSmpSetDefaultConfig(LE_SM_IO_CAP_NO_IO, FALSE, FALSE, TRUE);
             LeSetScanRspData(sizeof(g_scan_rsp_data), (UINT8 *)g_scan_rsp_data);
             Dw2_SetAdvParams(LE_HCI_ADV_TYPE_ADV_NONCONN_IND);
             g_app.state = DW2_BLE_STATE_IDLE;
@@ -528,6 +535,7 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                 if (is_open)
                 {
                     /* Door opened: 1 distinct blink */
+                    g_door_open_tick = xTaskGetTickCount();
                     g_app.open_duration_sec = 0;
                     Dw2_LedBlink(1, DW2_LED_BLINK_SHORT_MS, 0);
                     LeSendMessageAfter(&g_app.task, DW2_MSG_DOOR_TIMER, NULL, 1000U);
@@ -536,7 +544,16 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                 else
                 {
                     /* Door closed: 2 distinct blinks with clear gap */
-                    g_app.last_open_duration = g_app.open_duration_sec;
+                    if (g_door_open_tick > 0)
+                    {
+                        uint32_t elapsed_ms = xTaskGetTickCount() - g_door_open_tick;
+                        g_app.last_open_duration = (uint16_t)(elapsed_ms / 1000U);
+                    }
+                    else
+                    {
+                        g_app.last_open_duration = g_app.open_duration_sec;
+                    }
+                    g_door_open_tick = 0;
                     Dw2_LedBlink(2, DW2_LED_BLINK_SHORT_MS, DW2_LED_BLINK_GAP_MS);
                     Dw2_TriggerBurst(0U);
                 }

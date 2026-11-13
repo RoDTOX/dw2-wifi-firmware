@@ -462,6 +462,11 @@ async def run_sync_time(target_mac="88:4A:18:EA:CD:A0"):
     print(f"=== [DW2 TIME SYNC] Syncing RTC time to {target_mac} ===")
     print(f"  Current Epoch: {current_epoch} ({datetime.fromtimestamp(current_epoch).strftime('%Y-%m-%d %H:%M:%S')})")
 
+    device = await BleakScanner.find_device_by_address(target_mac, timeout=8.0)
+    if not device:
+        print(f"[ERROR] Device {target_mac} not detected! Open 3-min window via S1 or 5 magnet flicks.")
+        return 1
+
     ack_event = asyncio.Event()
 
     def notification_handler(sender, data):
@@ -471,7 +476,7 @@ async def run_sync_time(target_mac="88:4A:18:EA:CD:A0"):
                 ack_event.set()
 
     try:
-        async with BleakClient(target_mac, timeout=15.0) as client:
+        async with BleakClient(device, timeout=15.0) as client:
             await client.start_notify(OTA_CHAR_DATA_OUT, notification_handler)
             payload = struct.pack("<I", current_epoch)
             await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_TIME_SYNC, payload), response=False)
@@ -479,13 +484,21 @@ async def run_sync_time(target_mac="88:4A:18:EA:CD:A0"):
             print("[SUCCESS] Time synchronized successfully!")
             return 0
     except Exception as e:
-        print(f"[ERROR] Time sync failed: {e}")
+        print(f"[ERROR] Time sync failed: {type(e).__name__}: {e}")
         return 1
 
 
-async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None):
-    """Downloads all 128 KB blackbox logs from DW2 sensor over BLE."""
-    print(f"=== [DW2 LOG DUMP] Downloading blackbox logs from {target_mac} ===")
+async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None, count=20, dump_all=False):
+    """Downloads blackbox logs from DW2 sensor over BLE (default: last 20 entries)."""
+    limit_str = "ALL" if dump_all else f"last {count}"
+    print(f"=== [DW2 LOG DUMP] Waiting for {target_mac} ({limit_str} entries) ===")
+    print("    Tip: You can press button S1 or flick the magnet 5 times now...")
+
+    device = await BleakScanner.find_device_by_address(target_mac, timeout=15.0)
+    if not device:
+        print(f"[ERROR] Device {target_mac} not detected! Press button S1 or do 5 magnet flicks.")
+        return 1
+
     entries = []
     dump_finished = asyncio.Event()
 
@@ -501,7 +514,7 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None):
                 for i in range(0, len(payload), 16):
                     chunk = payload[i:i + 16]
                     if len(chunk) == 16:
-                        epoch, cnt, vbat, dur, flags, _, csum = struct.unpack("<IIHHBBB", chunk[:15] + chunk[15:16])
+                        epoch, cnt, vbat, dur, flags, _, csum = struct.unpack("<IIHHB2sB", chunk)
                         entries.append({
                             "epoch": epoch,
                             "counter": cnt,
@@ -512,7 +525,7 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None):
                 dump_finished.set()
 
     try:
-        async with BleakClient(target_mac, timeout=15.0) as client:
+        async with BleakClient(device, timeout=15.0) as client:
             await client.start_notify(OTA_CHAR_DATA_OUT, notification_handler)
 
             current_idx = 0
@@ -528,27 +541,32 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None):
                 if len(entries) <= current_idx:
                     break
                 current_idx = len(entries)
-                print(f"\r  Retrieved {len(entries)} log entries...", end="", flush=True)
+                if dump_all:
+                    print(f"\r  Retrieved {len(entries)} log entries...", end="", flush=True)
 
-            print(f"\n[SUCCESS] Retrieved {len(entries)} log entries from 128 KB Flash blackbox!")
-            if entries:
+            # If not dumping all, keep only the requested most recent entries
+            display_entries = entries if dump_all else entries[-count:]
+
+            print(f"\n[SUCCESS] Retrieved {len(entries)} total entries (displaying {len(display_entries)})!")
+            if display_entries:
                 print(f"\n{'Index':<6} {'Timestamp':<20} {'Counter':<8} {'State':<8} {'Duration':<10} {'Battery':<8} {'Flags'}")
                 print("-" * 75)
-                for idx, e in enumerate(entries[-20:]):  # Show last 20
+                for idx, e in enumerate(display_entries):
                     t_str = datetime.fromtimestamp(e["epoch"]).strftime("%Y-%m-%d %H:%M:%S") if e["epoch"] > 0 else "Unsynced"
                     state_str = "OPEN" if (e["flags"] & FLAG_DOOR_OPEN) else "CLOSED"
                     print(f"{idx:<6} {t_str:<20} #{e['counter']:<7} {state_str:<8} {e['duration_sec']:<8}s {e['vbat_mv']:<6}mV 0x{e['flags']:02X}")
 
             if out_csv and entries:
                 import csv
+                csv_records = entries if dump_all else display_entries
                 with open(out_csv, "w", newline="", encoding="utf-8") as f:
                     writer = csv.DictWriter(f, fieldnames=["epoch", "counter", "vbat_mv", "duration_sec", "flags"])
                     writer.writeheader()
-                    writer.writerows(entries)
+                    writer.writerows(csv_records)
                 print(f"[SUCCESS] Exported log history to: {out_csv}")
             return 0
     except Exception as e:
-        print(f"[ERROR] Log dump failed: {e}")
+        print(f"[ERROR] Log dump failed: {type(e).__name__}: {e}")
         return 1
 
 
@@ -590,7 +608,7 @@ def cmd_dump_logs(args):
         return 1
     target_mac = args.mac or "88:4A:18:EA:CD:A0"
     try:
-        return asyncio.run(run_dump_logs(target_mac=target_mac, out_csv=args.csv))
+        return asyncio.run(run_dump_logs(target_mac=target_mac, out_csv=args.csv, count=args.count, dump_all=args.all))
     except KeyboardInterrupt:
         return 1
 
@@ -650,6 +668,8 @@ def main():
     p_dump = subparsers.add_parser("dump-logs", help="Dump 128 KB SPI Flash blackbox history over BLE")
     p_dump.add_argument("--mac", "-m", default="88:4A:18:EA:CD:A0", help="Target MAC address")
     p_dump.add_argument("--csv", help="Export logs to CSV file")
+    p_dump.add_argument("--count", "-n", type=int, default=20, help="Number of recent logs to fetch (default: 20)")
+    p_dump.add_argument("--all", "-a", action="store_true", help="Dump entire 128KB flash history (slow)")
     p_dump.set_defaults(func=cmd_dump_logs)
 
     args = parser.parse_args()

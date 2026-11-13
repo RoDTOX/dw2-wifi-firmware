@@ -91,8 +91,30 @@ static LE_GATT_ATTR_T g_ota_db[OTA_IDX_TOP] =
     [OTA_IDX_DATA_OUT_CCCD] = CHAR_CLIENT_CONFIG_DESCRIPTOR(LE_GATT_PERMIT_AUTHOR_READ | LE_GATT_PERMIT_AUTHOR_WRITE, &g_ota_data_out_cccd)
 };
 
+/* Standard Current Time Service (CTS 0x1805) & Current Time (0x2A2B) */
+static UINT16 g_cts_svc_uuid       = ATT_SVC_CURRENT_TIME;
+static UINT16 g_cts_char_uuid      = ATT_CHAR_CT_TIME;
+static UINT8  g_cts_char_decl[]    = CHAR_DECL_UUID16_ATTR_VAL(LE_GATT_CHAR_PROP_RD | LE_GATT_CHAR_PROP_WR, ATT_CHAR_CT_TIME);
+static UINT8  g_cts_time_val[10]   = {0};
+
+enum
+{
+    CTS_IDX_SVC = 0,
+    CTS_IDX_CHAR,
+    CTS_IDX_VAL,
+    CTS_IDX_TOP
+};
+
+static LE_GATT_ATTR_T g_cts_db[CTS_IDX_TOP] =
+{
+    [CTS_IDX_SVC]  = PRIMARY_SERVICE_DECL_UUID16(&g_cts_svc_uuid),
+    [CTS_IDX_CHAR] = CHARACTERISTIC_DECL_UUID16(g_cts_char_decl),
+    [CTS_IDX_VAL]  = CHARACTERISTIC_UUID16(&g_cts_char_uuid, LE_GATT_PERMIT_READ | LE_GATT_PERMIT_WRITE, sizeof(g_cts_time_val), sizeof(g_cts_time_val), g_cts_time_val)
+};
+
 static LE_GATT_SERVICE_T *g_p_gap_svc = NULL;
 static LE_GATT_SERVICE_T *g_p_ota_svc = NULL;
+static LE_GATT_SERVICE_T *g_p_cts_svc = NULL;
 
 static uint16_t g_conn_hdl   = 0xFFFFU;
 static uint16_t g_notify_hdl = 0xFFFFU;
@@ -157,11 +179,12 @@ void Dw2_Ota_RegisterServices(void)
 {
     g_p_gap_svc = LeGattRegisterService(g_gap_db, GAP_IDX_TOP);
     g_p_ota_svc = LeGattRegisterService(g_ota_db, OTA_IDX_TOP);
+    g_p_cts_svc = LeGattRegisterService(g_cts_db, CTS_IDX_TOP);
 
     if (g_p_ota_svc)
     {
         g_notify_hdl = g_ota_db[OTA_IDX_DATA_OUT_VAL].handle;
-        DW2_LOG("[OTA] Opulinks OTA GATT Service (0xAAAA) registered! notify_hdl=%u\r\n", g_notify_hdl);
+        DW2_LOG("[OTA] Opulinks OTA GATT Service (0xAAAA) & Standard CTS (0x1805) registered! notify_hdl=%u\r\n", g_notify_hdl);
     }
     else
     {
@@ -457,9 +480,73 @@ static void HandleLogDumpReq(const uint8_t *data, uint16_t len)
     }
 }
 
+static uint32_t Dw2_ConvertCtsToEpoch(const uint8_t *val)
+{
+    /* val: 10 bytes:
+       0-1: year (uint16_t Little-Endian)
+       2:   month (1-12)
+       3:   day (1-31)
+       4:   hours (0-23)
+       5:   minutes (0-59)
+       6:   seconds (0-59)
+       7:   day_of_week
+       8:   fractions_256
+       9:   adjust_reason
+    */
+    uint16_t year  = (uint16_t)(val[0] | (val[1] << 8));
+    uint8_t  month = val[2];
+    uint8_t  day   = val[3];
+    uint8_t  hour  = val[4];
+    uint8_t  min   = val[5];
+    uint8_t  sec   = val[6];
+
+    if (year < 1970 || month < 1 || month > 12 || day < 1 || day > 31)
+    {
+        return 0;
+    }
+
+    /* Convert date to days since 1970 */
+    static const uint16_t days_before_month[12] = {
+        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
+    };
+
+    uint32_t days = 0;
+    for (uint16_t y = 1970; y < year; y++)
+    {
+        days += ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)) ? 366 : 365;
+    }
+
+    days += days_before_month[month - 1];
+    if (month > 2 && (((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0))))
+    {
+        days += 1;
+    }
+    days += (day - 1);
+
+    uint32_t epoch = days * 86400U + hour * 3600U + min * 60U + sec;
+    return epoch;
+}
+
 void Dw2_Ota_HandleAccessWrite(LE_GATT_MSG_ACCESS_WRITE_IND_T *ind)
 {
     UINT8 att_err = 0;
+
+    if (g_p_cts_svc && ind->handle >= g_p_cts_svc->startHdl && ind->handle <= g_p_cts_svc->endHdl)
+    {
+        UINT16 cts_attr = ind->handle - g_p_cts_svc->startHdl;
+        if (cts_attr == CTS_IDX_VAL && ind->len >= 7)
+        {
+            uint32_t epoch = Dw2_ConvertCtsToEpoch(ind->pVal);
+            if (epoch > 0)
+            {
+                Dw2_SetEpochSec(epoch);
+                DW2_LOG("[CTS] Phone synced time via Standard CTS: epoch=%u\r\n", epoch);
+            }
+        }
+        LeGattAccessWriteRsp(ind->conn_hdl, ind->flag, ind->handle, att_err);
+        return;
+    }
+
     UINT16 attr_id = ind->handle - g_p_ota_svc->startHdl;
 
     switch (attr_id)
