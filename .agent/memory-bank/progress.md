@@ -3,47 +3,28 @@
 ## Completed
 
 - Initial device investigation, FCC ID lookup, PCB V1.2 component identification, and BLE pairing scan (`88:4A:18:EA:CD:A0`, `ck_1002873d3e`).
-- Identified official Opulinks OPL1000 A2 SDK and reference CoolKit door sensor repo.
-- Repository initialized with `.agent/plan.md`, `.gitignore`, `docs/investigation.md`, and `.agent/memory-bank/`.
 - Cloned `OPL1000A2-SDK` and `OPL1000A2-Door-Sensor-Coolkit-Cloud-HTTPS` into `third_party/`.
-- Analyzed reference `blewifi` project and download tool guide:
-  - Confirmed `ck_` prefix and `0xAAAA` BLE service UUID match stock DW2-Wi-Fi.
-  - Reference GPIOs (`blewifi_configuration.h`): `BUTTON_IO_PORT=GPIO_IDX_04`, `MAGNETIC_IO_PORT=GPIO_IDX_05`, `BATTERY_IO_PORT=GPIO_IDX_02`, `LED_IO_PORT=GPIO_IDX_21`.
-  - UARTs (`main_patch.c` + `hal_dbg_uart.c`): `DbgUart` (`IO0`/`IO1`) defaults to `115200` bps; `UART_IDX_1` (`IO8`/`IO9` or switched) uses `9600` bps (`BLEWIFI_SYS_UART_BAUDRATE`).
-  - Download mode (`download_RELEASE.exe`): uses AT UART (`IO0`/`IO1`) at `115200` bps; click Download then press `RST` within 5 s. Tool does not support reading/dumping flash.
-  - Build toolchain: `arm-none-eabi-gcc` 14.2.1 (`%USERPROFILE%\tools\bin`) + `GNU Make` 4.4.1 (`%USERPROFILE%\tools\make\bin`) installed; verified `ble_adv` builds cleanly (`opl1000_app_m3.bin`, 70,332 bytes) using a GCC `@args.rsp` response file (Windows `cmd.exe` 8191-char limit workaround).
-- Step 5a (Custom BLE-only firmware skeleton) created in `firmware/` and compiled cleanly (`Output-GCC/dw2_ble.elf`: text=69941, data=632, bss=2652; `dw2_ble.bin`).
-- Step 5b/c (Live validation via RAM download on `COM6`):
-  - Downloaded into RAM via `download_RELEASE.exe` (`Download to RAM`).
-  - BLE bursts received by PC scanner from `88:4A:18:EA:CD:A0`:
-    - `0xFFFF: 4457 01 00 0200 7d0c` -> 'DW', v1, CLOSE (flags=0x00), counter=2, 3197 mV
-    - `0xFFFF: 4457 01 01 0300 7d0c` -> 'DW', v1, OPEN (flags=0x01), counter=3, 3197 mV
-    - `0xFFFF: 4457 01 00 0400 7d0c` -> 'DW', v1, CLOSE (flags=0x00), counter=4, 3197 mV
-    - `0xFFFF: 4457 01 01 0500 7d0c` -> 'DW', v1, OPEN (flags=0x01), counter=5, 3197 mV
-  - Zero packet loss across open/close cycle, monotonic counter working, battery reading ~3.2 V.
-
-- Permanent flash write completed:
-  - Verified cold boot directly from flash with 2xAAA batteries.
-  - Initial boot broadcasted heartbeat packet `cnt=1`, subsequent magnet events `cnt=2..7` (CLOSE/OPEN transitions) with RSSI -52 to -72 dBm and 3197 mV battery.
-- Created ESP32 BLE receiver component in `esp32_receiver/`:
-  - `dw2_ble_receiver.hpp`: header-only NimBLE-Arduino callback handler with passive scanning (50% duty cycle, coexists seamlessly with ESP32 Wi-Fi).
-  - `main.cpp`: example integration triggering heating cutoff on window open / resume on close.
-  - `platformio.ini`: ready to build or copy into `smart-home-heating`.
-- Enhanced Pro features implemented:
-  - 128 KB Circular Ring Buffer in Flash (`0x000E0000`, 8,192 events).
-  - Door open duration calculation (`open_duration_sec`) on close.
-  - Master RTC Authoritative Time Beacon flag for blackout recovery.
-  - Persistent NVS Flash configuration structure (`dw2_nv_config_t`).
-  - Standalone CLI Manager `tools/dw2_tool.py` (`build`, `ports`, `monitor`, `scan`).
+- Build toolchain configured: `arm-none-eabi-gcc` 14.2.1 and `GNU Make` 4.4.1.
+- Custom BLE-only firmware designed with BTHome V2 object broadcast (`0x1A`), ultra-low power `ps_smart_sleep`, and 45s Door Ajar alert.
+- Dual-Bank BLE OTA System built and verified:
+  - Custom 2nd stage boot agent `opl1000_ota_loader.bin` (12 KB at `0x00000000`).
+  - Dual bank descriptors (Header 1 at `0x00003000`, Header 2 at `0x00004000`).
+  - Active Bank 0 (`0x00005000`) and Bank 1 (`0x0003E000`).
+  - Live wireless flashing via Opulinks OTA GATT service (`0xAAAA`).
+- Clock & Reset Glitch Resolved:
+  - Invoking `Hal_Sys_SwResetAll_patch()` to switch APS clock from PLL back to XTAL before software reset, enabling warm reset without hanging.
+- Timing & Door Open Duration Accuracy:
+  - Switched from frozen `osKernelSysTick()` to FreeRTOS `xTaskGetTickCount()` (compensated across sleep intervals by 32.768 kHz RTC). Verified exact timing (`was_open_3s`, `was_open_11s`).
+- BLE Security & Time Synchronization:
+  - Added BLE Security Manager (`LE_SM_IO_CAP_NO_IO`, Just Works mode) to eliminate PIN errors on modern smartphones.
+  - Added standard Current Time Service (CTS 0x1805 / 0x2A2B) to allow automatic time sync from phones or CLI.
+- Maintenance & Fast Dump:
+  - Secret 5-flick magnetic knock and S1 button open a 3-minute connectable window.
+  - Immediate `LeGapAdvertisingEnable(TRUE)` added upon S1/knock trigger.
+  - CLI `dw2_tool.py dump-logs` now scans up to 15s and defaults to fast retrieval of the last 20 entries (with `--count` and `--all` options).
+- ESP32 receiver component in `esp32_receiver/` ready for smart-home integration.
+- Public documentation in `README.md`.
 
 ## Pending
 
-- None. Core goal achieved.
-
-## Open Questions
-
-1. Stock UART baud rate and boot logs.
-2. Exact OPL1000 GPIO pins for `H1`, `S1`, `LED1`.
-3. OPL1000 download/flash mode entry sequence.
-4. Flash read/write protection status on stock unit.
-5. Real sleep current with custom BLE firmware vs. stock ≤ 40 µA.
+- None. All functional and ergonomic goals achieved.

@@ -2,13 +2,14 @@
 
 ## Current Focus
 
-- Project goal 100% completed: Sonoff DW2-Wi-Fi custom BLE-only firmware written permanently to flash; ESP32 receiver component ready for `smart-home-heating`.
+- Sonoff DW2-Wi-Fi liberated into a 100% local, autonomous BLE smart sensor with Dual-Bank BLE OTA, BTHome V2 broadcast, 128 KB flight recorder, CTS real-time sync, and fast log dump CLI.
 
 ## Recent Changes
 
-- Added 128 KB Circular Flash Ring Buffer (~8,192 events) at `0x000E0000`.
-- Added door open duration calculation (`open_duration_sec`) on close.
-- Added Master RTC authoritative time beacon flag for blackout clock recovery.
-- Added persistent NVS flash configuration structure `dw2_nv_config_t` (Wi-Fi fallback on/off, SSID, password, MQTT, ACK timeout, Ajar timeout).
-- Created all-in-one CLI manager [tools/dw2_tool.py](file:///d:/_git/dw2-wifi-firmware/tools/dw2_tool.py) (`build`, `ports`, `monitor`, `scan`).
-- Updated ESP32 receiver [esp32_receiver/dw2_ble_receiver.hpp](file:///d:/_git/dw2-wifi-firmware/esp32_receiver/dw2_ble_receiver.hpp) to decode all new telemetry fields.
+- **Dual-Bank BLE OTA**: Full custom 2nd stage bootloader (`opl1000_ota_loader.bin` at `0x00000000`), Bank 0 (`0x00005000`) and Bank 1 (`0x00003E000`), and live wireless flashing verified via GATT `0xAAAA`.
+- **Clock & Software Reset Fix**: Switched to `Hal_Sys_SwResetAll_patch()` to ensure APS clock drops back from PLL to XTAL before reboot, eliminating post-OTA hang.
+- **Door Open Duration Tracking**: Replaced `osKernelSysTick()` with FreeRTOS `xTaskGetTickCount()` (compensated across `ps_smart_sleep` intervals by 32.768 kHz RTC).
+- **CTS Real-Time Sync**: Added standard BLE Current Time Service (0x1805 / 0x2A2B) and epoch conversion; mobile phones and CLI can set authoritative sensor time.
+- **BLE SMP Just Works**: Configured `LE_SM_IO_CAP_NO_IO` to eliminate "Incorrect PIN" popups on smartphones.
+- **Immediate Connectable Advertising**: Fixed `Dw2_EnterConnectableMode` to explicitly start advertising (`LeGapAdvertisingEnable(TRUE)`) immediately upon S1 press or 5 magnet flicks.
+- **CLI Ergonomics**: Updated `dw2_tool.py dump-logs` to scan for device with a 15-second discovery window and default to fetching the last 20 entries with `--count` and `--all` options.
