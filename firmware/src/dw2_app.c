@@ -67,11 +67,11 @@ static uint16_t g_ram_log_count = 0;
 /* Advertising payload: Flags (3B) + Manufacturer Specific Data (2B header + 20B payload) = 25B */
 static uint8_t g_adv_data[3 + 2 + sizeof(dw2_adv_payload_t)];
 
-static const uint8_t g_scan_rsp_data[] =
+static uint8_t g_scan_rsp_data[16] =
 {
-    0x04,
+    0x09,
     GAP_ADTYPE_LOCAL_NAME_COMPLETE,
-    'D', 'W', '2'
+    'D', 'W', '2', '-', '0', '0', '0', '0'
 };
 
 extern uint32_t xTaskGetTickCount(void);
@@ -327,7 +327,31 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             Dw2_Ota_Init(&g_app.task);
             LeSmpInit(&g_app.task);
             LeSmpSetDefaultConfig(LE_SM_IO_CAP_NO_IO, FALSE, FALSE, TRUE);
-            LeSetScanRspData(sizeof(g_scan_rsp_data), (UINT8 *)g_scan_rsp_data);
+
+            BD_ADDR bd_addr;
+            if (LeGapGetBdAddr(bd_addr) == SYS_ERR_SUCCESS)
+            {
+                /* In BLE BD_ADDR, addr[0]=LSB, addr[5]=MSB. Last 2 bytes on MAC sticker are addr[1] and addr[0] */
+                static const char hex[] = "0123456789ABCDEF";
+                char dev_name[16];
+                snprintf(dev_name, sizeof(dev_name), "DW2-%c%c%c%c",
+                         hex[(bd_addr[1] >> 4) & 0x0F],
+                         hex[bd_addr[1] & 0x0F],
+                         hex[(bd_addr[0] >> 4) & 0x0F],
+                         hex[bd_addr[0] & 0x0F]);
+
+                g_scan_rsp_data[0] = 0x09;
+                g_scan_rsp_data[1] = GAP_ADTYPE_LOCAL_NAME_COMPLETE;
+                memcpy(&g_scan_rsp_data[2], dev_name, 8);
+                LeSetScanRspData(10, g_scan_rsp_data);
+                Dw2_Ota_SetDeviceName(dev_name);
+                DW2_LOG("[DW2] Unique Device Name: %s\r\n", dev_name);
+            }
+            else
+            {
+                LeSetScanRspData(sizeof(g_scan_rsp_data), g_scan_rsp_data);
+            }
+
             Dw2_SetAdvParams(LE_HCI_ADV_TYPE_ADV_NONCONN_IND);
             g_app.state = DW2_BLE_STATE_IDLE;
             break;

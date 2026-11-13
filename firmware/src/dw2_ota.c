@@ -41,7 +41,7 @@ static UINT16 g_gap_svc_uuid  = ATT_SVC_GENERIC_ACCESS;
 
 static UINT16 g_gap_dev_name_uuid      = ATT_CHAR_DEVICE_NAME;
 static UINT8  g_gap_dev_name_char[]    = CHAR_DECL_UUID16_ATTR_VAL(LE_GATT_CHAR_PROP_RD, ATT_CHAR_DEVICE_NAME);
-static UINT8  g_gap_dev_name_val[]     = "DW2-OTA";
+static UINT8  g_gap_dev_name_val[16]   = "DW2";
 
 /* Opulinks OTA Service (0xAAAA) */
 static UINT16 g_ota_svc_uuid           = DW2_OTA_UUID_SERVICE;
@@ -67,8 +67,18 @@ static LE_GATT_ATTR_T g_gap_db[GAP_IDX_TOP] =
 {
     [GAP_IDX_SVC]           = PRIMARY_SERVICE_DECL_UUID16(&g_gap_svc_uuid),
     [GAP_IDX_DEV_NAME_CHAR] = CHARACTERISTIC_DECL_UUID16(g_gap_dev_name_char),
-    [GAP_IDX_DEV_NAME_VAL]  = CHARACTERISTIC_UUID16(&g_gap_dev_name_uuid, LE_GATT_PERMIT_READ, sizeof(g_gap_dev_name_val), sizeof(g_gap_dev_name_val) - 1, g_gap_dev_name_val)
+    [GAP_IDX_DEV_NAME_VAL]  = CHARACTERISTIC_UUID16(&g_gap_dev_name_uuid, LE_GATT_PERMIT_READ, sizeof(g_gap_dev_name_val), 3, g_gap_dev_name_val)
 };
+
+void Dw2_Ota_SetDeviceName(const char *name)
+{
+    if (name)
+    {
+        strncpy((char *)g_gap_dev_name_val, name, sizeof(g_gap_dev_name_val) - 1);
+        g_gap_dev_name_val[sizeof(g_gap_dev_name_val) - 1] = '\0';
+        g_gap_db[GAP_IDX_DEV_NAME_VAL].len = (UINT16)strlen((char *)g_gap_dev_name_val);
+    }
+}
 
 enum
 {

@@ -369,7 +369,7 @@ async def find_sensor_with_tips(target_mac, timeout=15.0, tip_after=3.5):
 
     is_conn = False
     if adv_data_saved:
-        if adv_data_saved.local_name == "DW2":
+        if adv_data_saved.local_name and adv_data_saved.local_name.startswith("DW2"):
             is_conn = True
 
     return device, is_conn

@@ -57,6 +57,7 @@ typedef struct __attribute__((packed))
 } dw2_ota_pkt_hdr_t;
 
 void Dw2_Ota_Init(TASK task);
+void Dw2_Ota_SetDeviceName(const char *name);
 void Dw2_Ota_RegisterServices(void);
 void Dw2_Ota_SetConnectionHandle(uint16_t conn_hdl);
 void Dw2_Ota_OnDisconnect(void);
