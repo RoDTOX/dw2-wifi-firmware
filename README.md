@@ -1,45 +1,128 @@
-# Sonoff DW2-Wi-Fi Custom BLE Firmware & Local Integration
+<div align="center">
 
-A complete, production-ready, open-source firmware replacement for the **Sonoff DW2-Wi-Fi** door/window sensor, built on the **Opulinks OPL1000 A2** SoC (ARM Cortex-M3 APS + Cortex-M0 MSQ).
+# 🚪 Sonoff DW2-Wi-Fi — Custom BLE Firmware
 
-Transforms a cloud-tethered, power-hungry Wi-Fi sensor into an **ultra-low-power, 100% local BLE smart sensor** featuring native **BTHome V2** integration, **Dual-Bank seamless Over-The-Air (OTA)** upgrades, an on-chip **128 KB SPI Flash blackbox flight recorder**, live **RTC time tracking**, door ajar alarm warnings, and a multi-tier hardware button (Reboot & Factory Reset).
+<p align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&pause=1000&color=41BDF5&center=true&vCenter=true&width=650&lines=Sonoff+DW2-Wi-Fi+%E2%86%92+100%25+Local+BLE+Powerhouse;BTHome+V2+Auto-Discovery+%E2%80%A2+Dual-Bank+OTA;~2+Years+Battery+Life+(~30%C2%B5A+Deep+Sleep);128+KB+SPI+Flash+Blackbox+Recorder;Zero+Cloud+%E2%80%A2+Zero+eWeLink+%E2%80%A2+Instant+Speed" alt="Typing SVG" />
+</p>
+
+### ⚡ Liberate your sensor into a 100% local, ultra-low-power BTHome V2 powerhouse
+
+[![Firmware License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![Hardware SoC](https://img.shields.io/badge/SoC-Opulinks%20OPL1000%20A2-orange.svg?style=for-the-badge&logo=arm)](https://www.opulinks.com/)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-BTHome%20V2-41BDF5.svg?style=for-the-badge&logo=homeassistant&logoColor=white)](https://bthome.io/)
+[![Battery Life](https://img.shields.io/badge/Battery-~2%20Years%20(30µA)-brightgreen.svg?style=for-the-badge&logo=battery)](https://github.com/RoDTOX/dw2-wifi-firmware)
+[![OTA Updates](https://img.shields.io/badge/OTA-Dual--Bank%20Wireless-purple.svg?style=for-the-badge&logo=bluetooth)](https://github.com/RoDTOX/dw2-wifi-firmware)
+[![Build Status](https://img.shields.io/badge/GCC%2014.2-Passing%20(0%20errors)-success.svg?style=for-the-badge&logo=gnu)](https://github.com/RoDTOX/dw2-wifi-firmware)
+
+<br/>
+
+<!-- Tech Stack Tags -->
+<p align="center">
+  <img src="https://img.shields.io/badge/C-00599C?style=flat-square&logo=c&logoColor=white" alt="C" />
+  <img src="https://img.shields.io/badge/ARM_Cortex--M3-0091BD?style=flat-square&logo=arm&logoColor=white" alt="ARM" />
+  <img src="https://img.shields.io/badge/Bluetooth_LE_5.0-0082FC?style=flat-square&logo=bluetooth&logoColor=white" alt="BLE" />
+  <img src="https://img.shields.io/badge/Home_Assistant-41BDF5?style=flat-square&logo=homeassistant&logoColor=white" alt="Home Assistant" />
+  <img src="https://img.shields.io/badge/Python_3.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/GCC_14.2-A42E2B?style=flat-square&logo=gnu&logoColor=white" alt="GCC" />
+  <img src="https://img.shields.io/badge/FreeRTOS-82BE27?style=flat-square&logo=freertos&logoColor=white" alt="FreeRTOS" />
+</p>
+
+<!-- Quick Navigation Bar -->
+<p align="center">
+  <a href="#-key-features"><img src="https://img.shields.io/badge/✨_Features-21262d?style=for-the-badge&logoColor=white" alt="Features" /></a>
+  <a href="#-quick-comparison-stock-vs-custom"><img src="https://img.shields.io/badge/⚖️_Comparison-21262d?style=for-the-badge&logoColor=white" alt="Comparison" /></a>
+  <a href="#-hardware-specifications-pcb-v12"><img src="https://img.shields.io/badge/📐_Hardware-21262d?style=for-the-badge&logoColor=white" alt="Hardware" /></a>
+  <a href="#-led-feedback--hardware-button-gestures"><img src="https://img.shields.io/badge/🎛️_Gestures-21262d?style=for-the-badge&logoColor=white" alt="Gestures" /></a>
+  <a href="#-quick-start--first-time-flash"><img src="https://img.shields.io/badge/🚀_Quick_Start-21262d?style=for-the-badge&logoColor=white" alt="Quick Start" /></a>
+  <a href="#-wireless-ota-upgrades-over-ble"><img src="https://img.shields.io/badge/📡_Wireless_OTA-21262d?style=for-the-badge&logoColor=white" alt="OTA" /></a>
+  <a href="#-cli-tool-reference-toolsdw2_toolpy"><img src="https://img.shields.io/badge/🛠️_CLI_Tool-21262d?style=for-the-badge&logoColor=white" alt="CLI" /></a>
+  <a href="#-home-assistant-integration"><img src="https://img.shields.io/badge/🏠_Home_Assistant-21262d?style=for-the-badge&logoColor=white" alt="HA" /></a>
+</p>
 
 ---
+
+</div>
 
 ## 🌟 Key Features
 
-- **100% Cloud-Free & Local:** Eliminates eWeLink, CoolKit servers, and Wi-Fi router dependency completely.
-- **Ultra-Low Power Consumption:** Operates in `ps_smart_sleep` mode (~30 µA standby current). Power-hungry Wi-Fi radio is completely disabled. ~2 years of battery life on standard AAA alkaline cells.
-- **Home Assistant & BTHome V2 Ready:** Broadcasts open/closed events using standard BTHome V2 objects (`0x1A`), auto-discovered by Home Assistant via Bluetooth Proxies or ESPHome without custom integrations.
-- **Unique Hardware-Derived Bluetooth Name:** Advertises as `DW2-XXXX` (e.g. `DW2-CDA0`), where `XXXX` matches the last two bytes of the MAC address printed on the physical sensor casing.
-- **Dual-Bank BLE OTA Upgrades:** True wireless firmware updates over BLE GATT service `0xAAAA`. Automatically alternates between Bank 0 (`0x00005000`) and Bank 1 (`0x0003E000`) with zero cables or disassembling needed after initial setup.
-- **Door Open Duration Tracker:** Real-time tracking of open window/door duration, transmitted on close (`was_open_Xs`).
-- **Door Ajar Alarm Warning:** Emits audible/visual alarm broadcasts every 15 seconds if a door is left open longer than 45 seconds.
-- **128 KB SPI Flash Blackbox Recorder:** Dedicated circular ring buffer (`0x000E0000`–`0x000FFFFF`, 8,192 entries) storing timestamped historical open/close events with battery levels, retained across battery replacements.
-- **Multi-Tier Hardware Button (S1):** Short press enters 3-minute OTA mode, 8–10s hold triggers SoC hard reboot, and ≥15s hold executes a clean factory format of the blackbox flash.
-- **Secret Knock Gesture:** Open the 3-minute connectable maintenance/OTA window by performing 5 rapid magnet flicks (*Secret Knock*).
-- **All-in-One CLI Manager (`dw2_tool.py`):** Cross-platform Python tool for compiling, serial flashing, real-time monitoring, BLE scanning, OTA flashing, RTC sync, and historical log dumping with binary search.
-- **Ready-to-Use ESP32 Receiver:** Header-only C++ driver in `esp32_receiver/` ready to plug into heating controllers or smart-home gateways.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4><img src="https://img.shields.io/badge/PRIVACY-100%25%20LOCAL-success?style=flat-square" alt="Privacy" /><br/>🛡️ 100% Cloud-Free & Local</h4>
+      <p>Operates entirely within your local Bluetooth perimeter. <b>Zero eWeLink accounts</b>, zero cloud servers, and zero internet dependency. Eliminates Wi-Fi pairing dropouts and vendor lock-in forever.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h4><img src="https://img.shields.io/badge/BATTERY-~2%20YEARS-brightgreen?style=flat-square" alt="Battery" /><br/>🔋 Extreme Battery Runtime</h4>
+      <p>Wi-Fi radio is permanently switched off in firmware. Deep sleep runs at <b>~30 µA</b> via hardware <code>ps_smart_sleep</code> and 32.768 kHz RTC compensation, delivering <b>~2 years of life</b> on standard AAA cells.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4><img src="https://img.shields.io/badge/INTEGRATION-BTHOME%20V2-blue?style=flat-square" alt="BTHome" /><br/>🏠 Native BTHome V2 Auto-Discovery</h4>
+      <p>Broadcasts standard <b>BTHome V2 Door objects (<code>0x1A</code>)</b>. Instantly auto-discovered by <b>Home Assistant</b>, <b>ESPHome BLE Proxies</b>, and <b>Shelly BLU</b> gateways with zero manual YAML.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h4><img src="https://img.shields.io/badge/FIRMWARE-DUAL--BANK%20OTA-purple?style=flat-square" alt="OTA" /><br/>📡 Fail-Safe Wireless BLE OTA</h4>
+      <p>True wireless firmware upgrades over Bluetooth GATT (<code>0xAAAA</code>). Dual-Bank architecture toggles between <b>Bank 0</b> and <b>Bank 1</b> with full CRC validation and automatic fallback if interrupted.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4><img src="https://img.shields.io/badge/TELEMETRY-AJAR%20ALERT-red?style=flat-square" alt="Telemetry" /><br/>⏱️ Open Duration & Ajar Warning</h4>
+      <p>Measures exact open duration in seconds and emits <code>was_open_Xs</code> upon closing. If left open <b>> 45 seconds</b>, emits a dedicated high-priority ajar alert every 15s to prevent energy waste.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h4><img src="https://img.shields.io/badge/STORAGE-128%20KB%20FLASH-orange?style=flat-square" alt="Storage" /><br/>💾 128 KB Flash Blackbox Recorder</h4>
+      <p>Dedicated on-chip SPI Flash circular log stores up to <b>8,192 historical events</b> with timestamps, battery mV, and flags. <b>Survives battery swaps</b> and dumps to CSV via CLI in ~0.5s via binary search.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4><img src="https://img.shields.io/badge/HARDWARE-MULTI--TIER%20S1-blueviolet?style=flat-square" alt="Button" /><br/>🎛️ Multi-Tier Physical Button Actions</h4>
+      <p>The onboard <code>S1</code> button serves multiple roles: <b>&lt; 5s</b> opens OTA mode, <b>8–10s</b> executes SoC Hard Reboot, and <b>≥ 15s</b> executes a complete factory format of the blackbox flash memory.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h4><img src="https://img.shields.io/badge/IDENTITY-DYNAMIC%20MAC-informational?style=flat-square" alt="Identity" /><br/>🏷️ Unique Case-Matched BLE Name</h4>
+      <p>Advertises dynamically as <b><code>DW2-XXXX</code></b> (e.g. <code>DW2-CDA0</code>) using the device's hardware factory MAC address, perfectly matching the serial sticker printed on the outer plastic casing.</p>
+    </td>
+  </tr>
+</table>
 
 ---
 
+## ⚖️ Quick Comparison: Stock vs Custom
+
 ## 📐 Hardware Specifications (PCB V1.2)
+
+```text
+       +---------------------------------------------+
+       | [J2 Header: 3V3  TXD  RXD  GND]             |
+       |                                             |
+       |   +-----------------------+     [LED1]      |
+       |   |   Opulinks OPL1000    |                 |
+       |   |  Cortex-M3 + M0 SoC   |     [S1 Button] |
+       |   +-----------------------+                 |
+       |                                             |
+       |   [BoyaMicro 25Q80 Flash]       [H1 Hall]   |
+       +---------------------------------------------+
+```
 
 | Component | Designator | Specification / Role |
 |---|---|---|
 | **SoC** | `U1` | Opulinks OPL1000 A2 (ARM Cortex-M3 @ 44–176 MHz + Cortex-M0) |
-| **SPI Flash** | `U2` | BoyaMicro 25Q80 (1 MB / 8 Mbit SPI NOR Flash) |
+| **SPI NOR Flash** | `U2` | BoyaMicro 25Q80 (1 MB / 8 Mbit SPI Flash) |
 | **Magnetic Sensor** | `H1` | Hall Effect switch on `IO5` (Active Low: Magnet present = Closed) |
 | **Maintenance Button** | `S1` | Tactile push button on `IO4` (Active Low) |
 | **Indicator LED** | `LED1` | Surface-mount LED on `IO21` (Active High) |
-| **Battery AuxADC** | Internal | Opulinks internal supply rail measurement with factory OTP calibration |
-| **Programming Port** | `J2` | 4-pin header: `3V3`, `TXD`, `RXD`, `GND` |
-| **Debug UART Output** | `IO8` | Single-wire 115200 bps Debug UART TX (bootloader & kernel logs) |
+| **Battery AuxADC** | Internal | Internal SoC rail measurement + OTP factory regression calibration |
+| **Serial Header** | `J2` | 4-pin 2.54mm pitch: `3V3`, `TXD`, `RXD`, `GND` |
+| **Debug UART** | `IO8` | Single-wire 115200 bps Debug UART TX (kernel boot logs) |
 | **Power Source** | — | 2 × AAA Alkaline / NiMH batteries (nominal 3.0 V) |
 
 ---
 
-## 🎛️ LED Feedback & Button Gestures
+## 🎛️ LED Feedback & Hardware Button Gestures
 
 ### LED Indications
 
@@ -49,9 +132,9 @@ Transforms a cloud-tethered, power-hungry Wi-Fi sensor into an **ultra-low-power
 | **1 Blink** | 80 ms ON | Door Opened |
 | **2 Blinks** | 80 ms ON / 120 ms OFF | Door Closed |
 | **5 Rapid Blinks** | 50 ms ON / 70 ms OFF | Maintenance / BLE Connectable OTA Mode Activated (3 min) |
-| **1 Single Blink (at 8s)** | 100 ms ON | Cue: "Release now to Hard Reboot" |
-| **10 Rapid Blinks** | 40 ms ON / 40 ms OFF | Reboot sequence initiated |
-| **Solid LED (at 15s)** | Continuous ON | Cue: "Release now to Factory Format Blackbox" |
+| **1 Single Blink (at 8s)** | 100 ms ON | Cue: *"Release now to Hard Reboot"* |
+| **10 Rapid Blinks** | 40 ms ON / 40 ms OFF | Hard Reboot sequence executing |
+| **Solid LED (at 15s)** | Continuous ON | Cue: *"Release now to Factory Format Blackbox"* |
 
 ### Multi-Tier S1 Button & Magnet Actions
 
@@ -67,21 +150,29 @@ Transforms a cloud-tethered, power-hungry Wi-Fi sensor into an **ultra-low-power
 
 ## 🗺️ SPI Flash Memory Map (1 MB)
 
-| Address Range | Size | Allocation / Description |
-|---|---|---|
-| `0x00000000` – `0x00002FFF` | 12 KB | **2nd Boot Agent** (`opl1000_ota_loader.bin`) |
-| `0x00003000` – `0x00003FFF` | 4 KB | **OTA Header 1** (Bank 0 descriptor, checksum, sequence number) |
-| `0x00004000` – `0x00004FFF` | 4 KB | **OTA Header 2** (Bank 1 descriptor, checksum, sequence number) |
-| `0x00005000` – `0x0003DFFF` | 228 KB | **Dual-Bank 0 (Primary Application Firmware)** |
-| `0x0003E000` – `0x00076FFF` | 228 KB | **Dual-Bank 1 (OTA Staging Application Firmware)** |
-| `0x00077000` – `0x000DFFFF` | 420 KB | Reserved / Opulinks RF calibration & NVS parameters |
-| `0x000E0000` – `0x000FFFFF` | 128 KB | **DW2 Blackbox Event Logger** (32 sectors of 4 KB, 8,192 entries) |
+```text
+0x00000000 +-------------------------------------------------------+
+           | 2nd Stage Boot Agent (opl1000_ota_loader.bin)   (12 KB)|
+0x00003000 +-------------------------------------------------------+
+           | OTA Header 1 (Bank 0 Descriptor & Checksum)      (4 KB)|
+0x00004000 +-------------------------------------------------------+
+           | OTA Header 2 (Bank 1 Descriptor & Checksum)      (4 KB)|
+0x00005000 +-------------------------------------------------------+
+           | Dual-Bank 0 (Primary Application Firmware)     (228 KB)|
+0x0003E000 +-------------------------------------------------------+
+           | Dual-Bank 1 (OTA Staging Firmware)             (228 KB)|
+0x00077000 +-------------------------------------------------------+
+           | Opulinks RF Calibration, MAC & NVS Storage     (420 KB)|
+0x000E0000 +-------------------------------------------------------+
+           | DW2 Blackbox Logger (32 x 4 KB Sectors, 8,192) (128 KB)|
+0x00100000 +-------------------------------------------------------+
+```
 
 ---
 
-## 🚀 Getting Started & First-Time Flashing
+## 🚀 Quick Start & First-Time Flash
 
-The initial transition from stock eWeLink firmware to custom firmware requires connecting a USB-to-UART adapter to write the **Dual-Bank Bootloader** once. Afterward, all future firmware updates are performed **100% wirelessly over BLE**.
+The initial transition from stock eWeLink firmware to custom firmware requires connecting a USB-to-UART adapter once to install the **Dual-Bank Bootloader**. Afterward, all future firmware updates are performed **100% wirelessly over BLE**.
 
 ### 1. Serial Pinout & Wiring
 
@@ -102,16 +193,16 @@ Solder four temporary jumper wires or use pogo-pins on the back of the DW2 PCB:
 > [!CAUTION]
 > Use **3.3V logic levels only**. 5V TTL will permanently damage the OPL1000 SoC. Remove the AAA batteries while powering via USB 3.3V.
 
-### 2. Writing the Initial Dual-Bank Bootloader Image
+### 2. Flashing the Initial Bootloader Image
 
 1. Open `third_party/OPL1000A2-SDK/Tool/Download/download_RELEASE.exe`.
 2. Select your USB COM port, Baud rate `115200`.
 3. Choose the generated complete bootloader package:
    ```text
-   firmware/Output-GCC/opl1000_ota.bin
+   third_party/OPL1000A2-SDK/Tool/Download/Patch/opl1000.bin
    ```
 4. Click **Start** in the download tool *before* powering the board.
-5. Connect 3.3V power (or momentarily touch `RST` to `GND`). The ROM bootloader will catch the sync pattern and flash the full image in ~15 seconds.
+5. Connect 3.3V power (or momentarily ground `RST`). The ROM bootloader will catch the sync pattern and flash the full image in ~15 seconds.
 6. Disconnect serial wires, re-insert AAA batteries, and close the case.
 
 ---
@@ -154,7 +245,7 @@ Output:
 The companion Python CLI provides complete operational control:
 
 ```powershell
-# 1. Compile firmware binary
+# 1. Compile firmware binary with GCC
 python tools/dw2_tool.py build
 
 # 2. Live BLE packet monitor & door event scanner
@@ -163,7 +254,7 @@ python tools/dw2_tool.py scan --timeout 30
 # 3. Synchronize RTC internal clock from host PC
 python tools/dw2_tool.py sync-time
 
-# 4. Dump the last 20 historical blackbox entries (default, takes ~0.5s via binary search)
+# 4. Dump the last 20 historical blackbox entries (takes ~0.5s via binary search)
 python tools/dw2_tool.py dump-logs
 
 # 5. Dump specific count or export full 128 KB log to CSV
@@ -244,6 +335,6 @@ void app_main() {
 
 ## 📄 License & Credits
 
-- **Firmware & CLI:** MIT License. Created by Bogdan & Antigravity (Google DeepMind).
+- **Firmware & CLI:** MIT License. Created by [Bogdan](https://github.com/RoDTOX) & Antigravity (Google DeepMind).
 - **Opulinks OPL1000 SDK:** Copyright (c) Opulinks Technology Ltd.
 - **Hardware Design:** Sonoff / ITEAD Intelligent Systems Co., Ltd.
