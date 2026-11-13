@@ -237,6 +237,36 @@ bool Dw2_FlashLog_Read(uint32_t entry_idx, dw2_log_entry_t *out_entry)
     return true;
 }
 
+bool Dw2_FlashLog_Erase(void)
+{
+    bool ok = true;
+
+    DW2_LOG("[LOG] Factory reset: erasing %u sectors at 0x%08X...\r\n",
+            DW2_FLASH_LOG_SECTORS, DW2_FLASH_LOG_BASE_ADDR);
+
+    for (uint32_t s = 0; s < DW2_FLASH_LOG_SECTORS; s++)
+    {
+        uint32_t sec_addr = DW2_FLASH_LOG_BASE_ADDR + (s * DW2_FLASH_LOG_SECTOR_SIZE);
+        uint32_t first_word = 0;
+
+        Hal_Flash_4KSectorAddrErase(SPI_IDX_0, sec_addr);
+
+        Hal_Flash_AddrRead(SPI_IDX_0, sec_addr, 0, sizeof(first_word), (uint8_t *)&first_word);
+        if (first_word != 0xFFFFFFFFU)
+        {
+            DW2_LOG("[LOG] Erase verify failed at 0x%08X\r\n", sec_addr);
+            ok = false;
+        }
+    }
+
+    g_write_addr   = DW2_FLASH_LOG_BASE_ADDR;
+    g_total_count  = 0;
+    g_last_counter = 0;
+    g_initialized  = ok;
+
+    return ok;
+}
+
 uint32_t Dw2_FlashLog_GetTotalCount(void)
 {
     return g_total_count;

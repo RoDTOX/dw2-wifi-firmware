@@ -22,6 +22,13 @@
 #define DW2_DOOR_DEBOUNCE_MS        (40U)       /* 40 ms: fast response, catches quick magnet flicks reliably */
 #define DW2_BUTTON_DEBOUNCE_MS      (30U)
 
+/* S1 multi-tier press windows (press -> release, ms) */
+#define DW2_BTN_SHORT_MAX_MS        (5000U)     /* < 5 s: Connectable OTA */
+#define DW2_BTN_REBOOT_MIN_MS       (8000U)     /* 8-10 s: hard reboot */
+#define DW2_BTN_REBOOT_MAX_MS       (10000U)
+#define DW2_BTN_FACTORY_MIN_MS      (15000U)    /* >= 15 s: factory reset */
+#define DW2_BTN_CUE_TOLERANCE_MS    (50U)
+
 /* LED pattern timings (ms) - crisp & distinct human-visible pulses */
 #define DW2_LED_BLINK_SHORT_MS      (80U)       /* 80 ms ON: solid, visible blink */
 #define DW2_LED_BLINK_GAP_MS        (120U)      /* 120 ms OFF: clear separation between blinks */

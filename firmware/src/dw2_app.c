@@ -56,6 +56,8 @@ typedef struct
     uint8_t         knock_count;
     uint8_t         pending_connectable;
     uint8_t         initialized;
+    uint8_t         btn_pressed;
+    uint32_t        btn_press_tick;
 } dw2_app_ctx_t;
 
 static dw2_app_ctx_t g_app;
@@ -76,6 +78,7 @@ static uint8_t g_scan_rsp_data[16] =
 };
 
 extern uint32_t xTaskGetTickCount(void);
+extern uint32_t Hal_Sys_SwResetAll_patch(void);
 
 static uint32_t g_sync_tick = 0;
 static uint32_t g_door_open_tick = 0;
@@ -314,6 +317,80 @@ static void Dw2_EnterConnectableMode(void)
     }
 
     LeSendMessageAfter(&g_app.task, DW2_MSG_CONNECTABLE_TIMEOUT, NULL, DW2_BLE_CONNECTABLE_TIMEOUT_MS);
+}
+
+static uint32_t Dw2_BtnHeldMs(void)
+{
+    return xTaskGetTickCount() - g_app.btn_press_tick;
+}
+
+static void Dw2_HardReboot(void)
+{
+    DW2_LOG("[DW2] S1 long press: hard reboot\r\n");
+    ps_smart_sleep(0);
+    Dw2_LedBlink(10, 40, 40);
+    osDelay(20);
+    Hal_Sys_SwResetAll_patch();
+}
+
+static void Dw2_FactoryReset(void)
+{
+    DW2_LOG("[DW2] S1 very long press: factory reset\r\n");
+    ps_smart_sleep(0);
+    Dw2_LedSet(1U);
+
+    uint16_t vbat_mv = Dw2_ReadBatteryMv();
+    if (vbat_mv < DW2_VBAT_LOW_THRESHOLD_MV && vbat_mv > 0)
+    {
+        DW2_LOG("[DW2] Factory reset refused: vbat=%umV too low for flash erase\r\n", vbat_mv);
+        Dw2_LedSet(0U);
+        Dw2_LedBlink(6, DW2_LED_BLINK_LONG_MS, DW2_LED_BLINK_LONG_MS);
+        ps_smart_sleep(DW2_SMART_SLEEP_EN);
+        return;
+    }
+
+    if (!Dw2_FlashLog_Erase())
+    {
+        Dw2_LedSet(0U);
+        Dw2_LedBlink(6, DW2_LED_BLINK_LONG_MS, DW2_LED_BLINK_LONG_MS);
+        ps_smart_sleep(DW2_SMART_SLEEP_EN);
+        return;
+    }
+
+    g_app.event_counter = 0;
+    memset(g_ram_log, 0, sizeof(g_ram_log));
+    g_ram_log_head  = 0;
+    g_ram_log_count = 0;
+
+    osDelay(1000);
+    Dw2_LedSet(0U);
+    Hal_Sys_SwResetAll_patch();
+}
+
+static void Dw2_ButtonReleased(uint32_t held_ms)
+{
+    DW2_LOG("[DW2] S1 released after %ums\r\n", held_ms);
+
+    if (held_ms < DW2_BTN_SHORT_MAX_MS)
+    {
+        Dw2_EnterConnectableMode();
+        return;
+    }
+
+    if (Dw2_Ota_IsUpgradeInProgress())
+    {
+        DW2_LOG("[DW2] S1 long press ignored: OTA in progress\r\n");
+        return;
+    }
+
+    if (held_ms >= DW2_BTN_FACTORY_MIN_MS)
+    {
+        Dw2_FactoryReset();
+    }
+    else if (held_ms >= DW2_BTN_REBOOT_MIN_MS && held_ms <= DW2_BTN_REBOOT_MAX_MS)
+    {
+        Dw2_HardReboot();
+    }
 }
 
 static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
@@ -609,11 +686,41 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
 
             if (lvl == DW2_BUTTON_PRESSED_LEVEL)
             {
-                /* Pressing S1 button also enters Connectable OTA mode! */
-                Dw2_EnterConnectableMode();
+                if (!g_app.btn_pressed)
+                {
+                    g_app.btn_pressed    = 1U;
+                    g_app.btn_press_tick = xTaskGetTickCount();
+                    LeSendMessageAfter(&g_app.task, DW2_MSG_BUTTON_CUE_REBOOT,  NULL, DW2_BTN_REBOOT_MIN_MS);
+                    LeSendMessageAfter(&g_app.task, DW2_MSG_BUTTON_CUE_FACTORY, NULL, DW2_BTN_FACTORY_MIN_MS);
+                }
+            }
+            else if (g_app.btn_pressed)
+            {
+                uint32_t held_ms = Dw2_BtnHeldMs();
+                g_app.btn_pressed = 0U;
+                Dw2_ButtonReleased(held_ms);
             }
             break;
         }
+
+        case DW2_MSG_BUTTON_CUE_REBOOT:
+            /* Single blink: "release now = reboot". Ignored if stale or already past the window. */
+            if (g_app.btn_pressed &&
+                Dw2_BtnHeldMs() + DW2_BTN_CUE_TOLERANCE_MS >= DW2_BTN_REBOOT_MIN_MS &&
+                Dw2_BtnHeldMs() <= DW2_BTN_REBOOT_MAX_MS)
+            {
+                Dw2_LedBlink(1, 100, 0);
+            }
+            break;
+
+        case DW2_MSG_BUTTON_CUE_FACTORY:
+            /* Solid LED: "release now = factory reset" */
+            if (g_app.btn_pressed &&
+                Dw2_BtnHeldMs() + DW2_BTN_CUE_TOLERANCE_MS >= DW2_BTN_FACTORY_MIN_MS)
+            {
+                Dw2_LedSet(1U);
+            }
+            break;
 
         case DW2_MSG_HEARTBEAT:
             LeSendMessageAfter(&g_app.task, DW2_MSG_HEARTBEAT, NULL, DW2_HEARTBEAT_PERIOD_MS);
