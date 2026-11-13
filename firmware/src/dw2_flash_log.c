@@ -18,6 +18,7 @@
 
 static uint32_t g_write_addr = DW2_FLASH_LOG_BASE_ADDR;
 static uint32_t g_total_count = 0;
+static uint32_t g_last_counter = 0;
 static bool     g_initialized = false;
 
 static uint8_t CalcEntryChecksum(const dw2_log_entry_t *entry)
@@ -135,8 +136,33 @@ void Dw2_FlashLog_Init(void)
         g_write_addr = DW2_FLASH_LOG_BASE_ADDR + (next_sec * DW2_FLASH_LOG_SECTOR_SIZE);
     }
 
-    DW2_LOG("[LOG] Log head located at 0x%08X (Sector %u), recovered entries=%u\r\n",
-            g_write_addr, (g_write_addr - DW2_FLASH_LOG_BASE_ADDR) / DW2_FLASH_LOG_SECTOR_SIZE, g_total_count);
+    /* Recover last event counter from previous entry to ensure monotonic sequence */
+    uint32_t last_entry_addr = 0xFFFFFFFFU;
+    if (slot_found && g_write_addr > sec_base)
+    {
+        last_entry_addr = g_write_addr - DW2_FLASH_LOG_ENTRY_SIZE;
+    }
+    else if (slot_found && g_write_addr == sec_base && active_sector > 0)
+    {
+        last_entry_addr = DW2_FLASH_LOG_BASE_ADDR + (active_sector * DW2_FLASH_LOG_SECTOR_SIZE) - DW2_FLASH_LOG_ENTRY_SIZE;
+    }
+    else if (!slot_found)
+    {
+        last_entry_addr = sec_base + DW2_FLASH_LOG_SECTOR_SIZE - DW2_FLASH_LOG_ENTRY_SIZE;
+    }
+
+    if (last_entry_addr != 0xFFFFFFFFU)
+    {
+        dw2_log_entry_t last_ent;
+        Hal_Flash_AddrRead(SPI_IDX_0, last_entry_addr, 0, sizeof(dw2_log_entry_t), (uint8_t *)&last_ent);
+        if (CalcEntryChecksum(&last_ent) == last_ent.checksum && last_ent.event_counter != 0xFFFFFFFFU)
+        {
+            g_last_counter = last_ent.event_counter;
+        }
+    }
+
+    DW2_LOG("[LOG] Log head located at 0x%08X (Sector %u), recovered entries=%u, last_counter=%u\r\n",
+            g_write_addr, (g_write_addr - DW2_FLASH_LOG_BASE_ADDR) / DW2_FLASH_LOG_SECTOR_SIZE, g_total_count, g_last_counter);
 
     g_initialized = true;
 }
@@ -147,6 +173,8 @@ bool Dw2_FlashLog_Write(uint32_t epoch_sec, uint32_t counter, uint16_t vbat_mv, 
     {
         Dw2_FlashLog_Init();
     }
+
+    g_last_counter = counter;
 
     /* If at sector boundary, erase the sector before writing */
     if ((g_write_addr % DW2_FLASH_LOG_SECTOR_SIZE) == 0)
@@ -212,6 +240,11 @@ bool Dw2_FlashLog_Read(uint32_t entry_idx, dw2_log_entry_t *out_entry)
 uint32_t Dw2_FlashLog_GetTotalCount(void)
 {
     return g_total_count;
+}
+
+uint32_t Dw2_FlashLog_GetLastCounter(void)
+{
+    return g_last_counter;
 }
 
 uint32_t Dw2_FlashLog_GetWriteAddr(void)

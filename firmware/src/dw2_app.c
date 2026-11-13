@@ -55,6 +55,7 @@ typedef struct
     uint8_t         pending_flags;
     uint8_t         knock_count;
     uint8_t         pending_connectable;
+    uint8_t         initialized;
 } dw2_app_ctx_t;
 
 static dw2_app_ctx_t g_app;
@@ -359,10 +360,12 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
 
         case LE_CM_MSG_SET_ADVERTISING_PARAMS_CFM:
         {
-            if (g_app.state == DW2_BLE_STATE_INIT || g_app.state == DW2_BLE_STATE_IDLE)
+            if (!g_app.initialized)
             {
-                /* Initialize 128 KB SPI Flash logger safely after BLE & RTOS scheduler ready */
+                /* Initialize 128 KB SPI Flash logger and restore monotonic event counter */
                 Dw2_FlashLog_Init();
+                g_app.event_counter = Dw2_FlashLog_GetLastCounter();
+                DW2_LOG("[DW2] Resumed monotonic counter from flash: #%u\r\n", g_app.event_counter);
 
                 E_GpioLevel_t door_lvl = Hal_Vic_GpioInput(DW2_MAGNETIC_IO_PORT);
                 E_GpioLevel_t btn_lvl  = Hal_Vic_GpioInput(DW2_BUTTON_IO_PORT);
@@ -374,6 +377,7 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                 ps_smart_sleep(DW2_SMART_SLEEP_EN);
                 LeSendMessageAfter(&g_app.task, DW2_MSG_HEARTBEAT, NULL, DW2_HEARTBEAT_PERIOD_MS);
 
+                g_app.initialized = 1U;
                 Dw2_LedBlink(3, DW2_LED_BLINK_SHORT_MS, DW2_LED_BLINK_GAP_MS);
                 Dw2_TriggerBurst(DW2_FLAG_HEARTBEAT);
             }

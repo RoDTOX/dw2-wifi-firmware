@@ -24,6 +24,7 @@
 #define DW2_LOG printf
 
 extern void Dw2_SetEpochSec(uint32_t epoch);
+extern uint32_t Hal_Sys_SwResetAll_patch(void);
 
 /* Opulinks OTA global state from SDK */
 extern T_MwOtaLayoutInfo g_tMwOtaLayoutInfo;
@@ -151,11 +152,11 @@ static void Dw2_Ota_SendResponse(uint16_t type, const uint8_t *data, uint16_t le
     }
 
     uint8_t buf[256];
-    uint16_t total_len = (uint16_t)(sizeof(dw2_ota_pkt_hdr_t) + len);
-    if (total_len > sizeof(buf))
+    if (len > sizeof(buf) - sizeof(dw2_ota_pkt_hdr_t))
     {
-        total_len = sizeof(buf);
+        return;
     }
+    uint16_t total_len = (uint16_t)(sizeof(dw2_ota_pkt_hdr_t) + len);
 
     dw2_ota_pkt_hdr_t *hdr = (dw2_ota_pkt_hdr_t *)buf;
     hdr->type     = type;
@@ -415,7 +416,6 @@ static void HandleOtaEndReq(const uint8_t *data, uint16_t len)
             osDelay(1000);
 
             /* Switch APS clock to XTAL before reset to prevent glitch-free clock mux hang */
-            extern uint32_t Hal_Sys_SwResetAll_patch(void);
             Hal_Sys_SwResetAll_patch();
             return;
         }
@@ -442,7 +442,10 @@ static void HandleTimeSyncReq(const uint8_t *data, uint16_t len)
 {
     if (len >= 4)
     {
-        uint32_t epoch = (uint32_t)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
+        uint32_t epoch = ((uint32_t)data[0]) |
+                         (((uint32_t)data[1]) << 8) |
+                         (((uint32_t)data[2]) << 16) |
+                         (((uint32_t)data[3]) << 24);
         Dw2_SetEpochSec(epoch);
         DW2_LOG("[OTA] Time synced to Epoch: %u\r\n", epoch);
         uint8_t st = 0;
@@ -456,7 +459,10 @@ static void HandleLogDumpReq(const uint8_t *data, uint16_t len)
     uint32_t start_idx = 0;
     if (data != NULL && len >= 4)
     {
-        start_idx = (uint32_t)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
+        start_idx = ((uint32_t)data[0]) |
+                    (((uint32_t)data[1]) << 8) |
+                    (((uint32_t)data[2]) << 16) |
+                    (((uint32_t)data[3]) << 24);
     }
 
     uint32_t total = Dw2_FlashLog_GetTotalCount();
