@@ -387,7 +387,7 @@ def encap_pkt(cmd_type, payload=b""):
     return struct.pack("<HH", cmd_type, len(payload)) + payload
 
 
-async def find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0):
+async def find_sensor_with_tips(target_mac, timeout=45.0, tip_after=3.0, require_connectable=False):
     """
     Scans for sensor with real-time feedback:
     - If sensor is sleeping, shows helpful wake tips after tip_after seconds.
@@ -401,6 +401,10 @@ async def find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0):
     def detection_callback(dev, adv):
         nonlocal device, adv_data_saved
         if dev.address.upper() == target_mac.upper():
+            is_conn = getattr(adv, "connectable", None)
+            if require_connectable and is_conn is False:
+                # Sensor is broadcasting non-connectable burst, wait for S1 press
+                return
             device = dev
             adv_data_saved = adv
             stop_event.set()
@@ -432,10 +436,11 @@ async def find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0):
     if not device:
         return None, False
 
-    is_conn = False
+    is_conn = True
     if adv_data_saved:
-        if adv_data_saved.local_name and adv_data_saved.local_name.startswith("DW2"):
-            is_conn = True
+        conn_attr = getattr(adv_data_saved, "connectable", None)
+        if conn_attr is False:
+            is_conn = False
 
     return device, is_conn
 
@@ -472,8 +477,8 @@ async def run_ota(firmware_path, target_mac="88:4A:18:EA:CD:A0", chunk_size=128,
             last_response["data"] = payload
             ack_event.set()
 
-    print(f"[OTA] Scanning for device {target_mac} (up to 35s)...")
-    device, is_conn = await find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0)
+    print(f"[OTA] Scanning for device {target_mac} (up to 45s)...")
+    device, is_conn = await find_sensor_with_tips(target_mac, timeout=45.0, tip_after=3.0, require_connectable=True)
     if not device:
         print(f"[ERROR] Device {target_mac} not detected!")
         print("        Please perform SECRET KNOCK (5 magnet flicks) or PRESS BUTTON S1 to enter OTA mode.")
