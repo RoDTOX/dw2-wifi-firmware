@@ -42,6 +42,12 @@
   <a href="#-home-assistant-integration">🏠 <b>Home Assistant</b></a>
 </p>
 
+<br/>
+
+<p align="center">
+  <img src="docs/dw2_banner.png" alt="Sonoff DW2 Custom BLE Firmware Presentation Banner" width="100%" />
+</p>
+
 ---
 
 </div>
