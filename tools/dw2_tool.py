@@ -181,6 +181,33 @@ def cmd_monitor(args):
         return 1
 
 
+def parse_bthome_v2(raw_bytes):
+    """Parses BTHome V2 Service Data payload (UUID 0xFCD2)."""
+    if not raw_bytes or len(raw_bytes) < 1:
+        return None
+    info = raw_bytes[0]
+    idx = 1
+    res = {"is_bthome": True, "device_info": info}
+    while idx < len(raw_bytes):
+        obj_id = raw_bytes[idx]
+        idx += 1
+        if obj_id == 0x00 and idx < len(raw_bytes):
+            res["counter"] = raw_bytes[idx]
+            idx += 1
+        elif obj_id == 0x01 and idx < len(raw_bytes):
+            res["battery_pct"] = raw_bytes[idx]
+            idx += 1
+        elif obj_id == 0x0C and idx + 1 < len(raw_bytes):
+            res["battery_mv"] = raw_bytes[idx] | (raw_bytes[idx + 1] << 8)
+            idx += 2
+        elif obj_id == 0x1A and idx < len(raw_bytes):
+            res["is_open"] = bool(raw_bytes[idx])
+            idx += 1
+        else:
+            break
+    return res
+
+
 def parse_dw2_payload(raw_bytes):
     """Parses DW2 manufacturer data (18 bytes payload after 0xFFFF company ID)."""
     if len(raw_bytes) < 6:
@@ -243,18 +270,50 @@ async def run_scan(timeout=30.0, target_mac=None):
     seen_counters = {}
 
     def detection_callback(device, advertisement_data):
-        mfg = advertisement_data.manufacturer_data
-        if DW2_COMPANY_ID not in mfg:
-            return
+        # 1. Check Service Data (BTHome V2, UUID 0xFCD2)
+        bthome_raw = None
+        if advertisement_data.service_data:
+            for uuid_key, s_data in advertisement_data.service_data.items():
+                if "fcd2" in uuid_key.lower():
+                    bthome_raw = s_data
+                    break
 
-        raw = mfg[DW2_COMPANY_ID]
-        parsed = parse_dw2_payload(raw)
-        if not parsed:
+        bthome = parse_bthome_v2(bthome_raw) if bthome_raw else None
+
+        # 2. Check Manufacturer Specific Data
+        mfg = advertisement_data.manufacturer_data
+        mfg_raw = mfg.get(DW2_COMPANY_ID) if mfg else None
+        parsed = parse_dw2_payload(mfg_raw) if mfg_raw else None
+
+        # If neither is present, skip
+        if not parsed and not bthome:
             return
 
         mac = device.address
         if target_mac and mac.lower() != target_mac.lower():
             return
+
+        if bthome and not parsed:
+            parsed = {
+                "version": 2,
+                "flags": 1 if bthome.get("is_open") else 0,
+                "counter": bthome.get("counter", 0),
+                "epoch": 0,
+                "time_str": "BTHome V2",
+                "battery_mv": bthome.get("battery_mv", 3000),
+                "open_duration_sec": 0,
+                "is_open": bthome.get("is_open", False),
+                "is_heartbeat": False,
+                "is_button": False,
+                "is_ajar": False,
+                "is_synced": False,
+                "is_low_bat": False,
+                "is_wifi_fallback": False,
+                "is_rtc_beacon": False,
+            }
+
+        if bthome and "battery_pct" in bthome:
+            parsed["battery_pct"] = bthome["battery_pct"]
 
         # Deduplicate identical bursts
         last_cnt = seen_counters.get(mac, -1)
@@ -265,6 +324,12 @@ async def run_scan(timeout=30.0, target_mac=None):
         ts = datetime.now().strftime("%H:%M:%S")
         state_str = "OPEN " if parsed["is_open"] else "CLOSED"
         extra = []
+        if bthome:
+            extra.append("BTHome_V2")
+        if parsed.get("battery_pct") is not None:
+            bat_str = f"Bat: {parsed['battery_mv']}mV ({parsed['battery_pct']}%)"
+        else:
+            bat_str = f"Bat: {parsed['battery_mv']}mV"
         if parsed["is_ajar"]:
             extra.append("AJAR_ALARM")
         if parsed["is_button"]:
@@ -282,7 +347,7 @@ async def run_scan(timeout=30.0, target_mac=None):
 
         print(
             f"[{ts}] {mac} | #{parsed['counter']:<4} | {state_str} | "
-            f"Bat: {parsed['battery_mv']}mV | Time: {parsed['time_str']} | "
+            f"{bat_str} | Time: {parsed['time_str']} | "
             f"RSSI: {advertisement_data.rssi}dBm{extra_str}"
         )
 

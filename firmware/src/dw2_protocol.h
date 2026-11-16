@@ -13,6 +13,16 @@
 #define DW2_BLE_MAGIC_1             (0x57U)     /* 'W' */
 #define DW2_BLE_PROTO_VERSION       (0x02U)     /* Version 2: Epoch time + BTHome compatible */
 
+/* BTHome V2 Protocol Definitions (UUID 0xFCD2) */
+#define BTHOME_UUID_16              (0xFCD2U)
+#define BTHOME_DEVICE_INFO_V2       (0x40U)     /* Version 2, unencrypted */
+#define BTHOME_FLAG_TRIGGER_BASED   (0x04U)     /* Event-driven / trigger-based device (door/window) */
+
+#define BTHOME_OBJ_PACKET_ID        (0x00U)     /* Packet ID (uint8_t) */
+#define BTHOME_OBJ_BATTERY          (0x01U)     /* Battery % (uint8_t, 0-100) */
+#define BTHOME_OBJ_VOLTAGE          (0x0CU)     /* Voltage (uint16_t, factor 0.001 V = mV) */
+#define BTHOME_OBJ_DOOR             (0x1AU)     /* Door sensor (uint8_t: 0=closed, 1=open) */
+
 /* Flag bits */
 #define DW2_FLAG_DOOR_OPEN          (1U << 0)   /* 1 = Open, 0 = Closed */
 #define DW2_FLAG_HEARTBEAT          (1U << 1)   /* 1 = Periodic heartbeat */

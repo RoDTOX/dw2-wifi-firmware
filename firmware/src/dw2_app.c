@@ -67,15 +67,19 @@ static dw2_log_entry_t g_ram_log[DW2_RAM_LOG_CAPACITY];
 static uint16_t g_ram_log_head = 0;
 static uint16_t g_ram_log_count = 0;
 
-/* Advertising payload: Flags (3B) + Manufacturer Specific Data (2B header + 20B payload) = 25B */
-static uint8_t g_adv_data[3 + 2 + sizeof(dw2_adv_payload_t)];
+/* Official BTHome V2 Advertising payload: Flags (3B) + Service Data 0xFCD2 (14B) = 17B */
+#define DW2_ADV_DATA_LEN            (17U)
+static uint8_t g_adv_data[DW2_ADV_DATA_LEN];
 
-static uint8_t g_scan_rsp_data[16] =
+/* Scan Response: Complete Local Name (10B) + DW2 Extended Telemetry (20B) = 30B */
+#define DW2_SCAN_RSP_LEN            (30U)
+static uint8_t g_scan_rsp_data[DW2_SCAN_RSP_LEN] =
 {
     0x09,
     GAP_ADTYPE_LOCAL_NAME_COMPLETE,
     'D', 'W', '2', '-', '0', '0', '0', '0'
 };
+static char g_dev_name[16] = "DW2-0000";
 
 extern uint32_t xTaskGetTickCount(void);
 extern uint32_t Hal_Sys_SwResetAll_patch(void);
@@ -208,32 +212,85 @@ static void Dw2_ButtonGpioCb(E_GpioIdx_t gpio_idx)
 
 static void Dw2_BuildAdvPacket(uint8_t flags, uint16_t battery_mv)
 {
-    dw2_adv_payload_t payload;
+    /* 1. Calculate battery percentage (2.2V = 0%, 3.0V = 100%) */
+    uint8_t bat_pct = 100U;
+    if (battery_mv <= 2200U)
+    {
+        bat_pct = 0U;
+    }
+    else if (battery_mv < 3000U)
+    {
+        bat_pct = (uint8_t)(((battery_mv - 2200U) * 100U) / (3000U - 2200U));
+    }
 
-    payload.company_id        = DW2_BLE_COMPANY_ID;
-    payload.magic[0]          = DW2_BLE_MAGIC_0;
-    payload.magic[1]          = DW2_BLE_MAGIC_1;
-    payload.version           = DW2_BLE_PROTO_VERSION;
-    payload.flags             = flags;
-    payload.event_counter     = ++g_app.event_counter;
-    payload.epoch_sec         = Dw2_GetCurrentEpochSec();
-    payload.battery_mv        = battery_mv;
-    payload.open_duration_sec = (flags & DW2_FLAG_DOOR_OPEN) ? 0U : g_app.last_open_duration;
-    payload.bthome_id         = 0x1AU;
-    payload.bthome_val        = (flags & DW2_FLAG_DOOR_OPEN) ? 1U : 0U;
+    uint8_t door_state = (flags & DW2_FLAG_DOOR_OPEN) ? 1U : 0U;
+    uint32_t counter = ++g_app.event_counter;
+    uint32_t epoch = Dw2_GetCurrentEpochSec();
+    uint16_t duration = (flags & DW2_FLAG_DOOR_OPEN) ? 0U : g_app.last_open_duration;
 
+    /* -------------------------------------------------------------
+     * Official BTHome V2 Advertising Packet (UUID 0xFCD2):
+     * Total = 3B Flags + 14B BTHome Service Data = 17 Bytes
+     * ------------------------------------------------------------- */
+    /* Flags AD structure */
     g_adv_data[0] = 0x02U;
     g_adv_data[1] = GAP_ADTYPE_FLAGS;
     g_adv_data[2] = GAP_ADTYPE_FLAGS_GENERAL | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED;
-    g_adv_data[3] = (uint8_t)(1U + sizeof(dw2_adv_payload_t));
-    g_adv_data[4] = GAP_ADTYPE_MANUFACTURER_SPECIFIC;
-    memcpy(&g_adv_data[5], &payload, sizeof(payload));
+
+    /* BTHome V2 Service Data AD structure (UUID 0xFCD2) */
+    g_adv_data[3] = 13U;                    /* Length: 1B type + 2B UUID + 1B info + 9B measurements */
+    g_adv_data[4] = GAP_ADTYPE_SERVICE_DATA;/* 0x16 */
+    g_adv_data[5] = (uint8_t)(BTHOME_UUID_16 & 0xFFU);        /* 0xD2 */
+    g_adv_data[6] = (uint8_t)((BTHOME_UUID_16 >> 8) & 0xFFU); /* 0xFC */
+    g_adv_data[7] = BTHOME_DEVICE_INFO_V2 | BTHOME_FLAG_TRIGGER_BASED; /* 0x44 */
+
+    /* BTHome Object 0x00: Packet ID (uint8_t) */
+    g_adv_data[8] = BTHOME_OBJ_PACKET_ID;
+    g_adv_data[9] = (uint8_t)(counter & 0xFFU);
+
+    /* BTHome Object 0x01: Battery percentage (uint8_t, 0-100%) */
+    g_adv_data[10] = BTHOME_OBJ_BATTERY;
+    g_adv_data[11] = bat_pct;
+
+    /* BTHome Object 0x0C: Battery Voltage (uint16_t little-endian, factor 0.001 V = mV) */
+    g_adv_data[12] = BTHOME_OBJ_VOLTAGE;
+    g_adv_data[13] = (uint8_t)(battery_mv & 0xFFU);
+    g_adv_data[14] = (uint8_t)((battery_mv >> 8) & 0xFFU);
+
+    /* BTHome Object 0x1A: Door sensor (uint8_t, 0 = closed, 1 = open) */
+    g_adv_data[15] = BTHOME_OBJ_DOOR;
+    g_adv_data[16] = door_state;
+
+    /* -------------------------------------------------------------
+     * Scan Response Data:
+     * Complete Local Name (10B) + DW2 Manufacturer Telemetry (20B) = 30B
+     * ------------------------------------------------------------- */
+    /* AD Structure 1: Complete Local Name */
+    g_scan_rsp_data[0] = 0x09U;
+    g_scan_rsp_data[1] = GAP_ADTYPE_LOCAL_NAME_COMPLETE;
+    memcpy(&g_scan_rsp_data[2], g_dev_name, 8);
+
+    /* AD Structure 2: Manufacturer Specific Data (DW2 Extended Telemetry) */
+    g_scan_rsp_data[10] = 19U;              /* Length: 1B type + 2B company ID + 16B payload */
+    g_scan_rsp_data[11] = GAP_ADTYPE_MANUFACTURER_SPECIFIC;
+    g_scan_rsp_data[12] = (uint8_t)(DW2_BLE_COMPANY_ID & 0xFFU);
+    g_scan_rsp_data[13] = (uint8_t)((DW2_BLE_COMPANY_ID >> 8) & 0xFFU);
+    g_scan_rsp_data[14] = DW2_BLE_MAGIC_0;  /* 'D' */
+    g_scan_rsp_data[15] = DW2_BLE_MAGIC_1;  /* 'W' */
+    g_scan_rsp_data[16] = DW2_BLE_PROTO_VERSION; /* 0x02 */
+    g_scan_rsp_data[17] = flags;
+    memcpy(&g_scan_rsp_data[18], &counter, sizeof(counter));
+    memcpy(&g_scan_rsp_data[22], &epoch, sizeof(epoch));
+    memcpy(&g_scan_rsp_data[26], &battery_mv, sizeof(battery_mv));
+    memcpy(&g_scan_rsp_data[28], &duration, sizeof(duration));
+
+    LeSetScanRspData(DW2_SCAN_RSP_LEN, g_scan_rsp_data);
 
     /* 1. Log to 128 KB SPI Flash circular ring buffer */
-    Dw2_FlashLog_Write(payload.epoch_sec, g_app.event_counter, battery_mv, payload.open_duration_sec, flags);
+    Dw2_FlashLog_Write(epoch, counter, battery_mv, duration, flags);
 
     /* 2. Secondary log to RAM blackbox */
-    Dw2_LogEventToRam(payload.epoch_sec, g_app.event_counter, battery_mv, payload.open_duration_sec, flags);
+    Dw2_LogEventToRam(epoch, counter, battery_mv, duration, flags);
 }
 
 static void Dw2_SetAdvParams(UINT8 adv_type)
@@ -411,8 +468,7 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             {
                 /* In BLE BD_ADDR, addr[0]=LSB, addr[5]=MSB. Last 2 bytes on MAC sticker are addr[1] and addr[0] */
                 static const char hex[] = "0123456789ABCDEF";
-                char dev_name[16];
-                snprintf(dev_name, sizeof(dev_name), "DW2-%c%c%c%c",
+                snprintf(g_dev_name, sizeof(g_dev_name), "DW2-%c%c%c%c",
                          hex[(bd_addr[1] >> 4) & 0x0F],
                          hex[bd_addr[1] & 0x0F],
                          hex[(bd_addr[0] >> 4) & 0x0F],
@@ -420,10 +476,10 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
 
                 g_scan_rsp_data[0] = 0x09;
                 g_scan_rsp_data[1] = GAP_ADTYPE_LOCAL_NAME_COMPLETE;
-                memcpy(&g_scan_rsp_data[2], dev_name, 8);
+                memcpy(&g_scan_rsp_data[2], g_dev_name, 8);
                 LeSetScanRspData(10, g_scan_rsp_data);
-                Dw2_Ota_SetDeviceName(dev_name);
-                DW2_LOG("[DW2] Unique Device Name: %s\r\n", dev_name);
+                Dw2_Ota_SetDeviceName(g_dev_name);
+                DW2_LOG("[DW2] Unique Device Name: %s\r\n", g_dev_name);
             }
             else
             {
