@@ -3,43 +3,29 @@
 # 🚪 Sonoff DW2-Wi-Fi — Custom BLE Firmware
 
 <p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=16&pause=1000&color=41BDF5&center=true&vCenter=true&width=580&lines=Sonoff+DW2-Wi-Fi+%E2%86%92+100%25+Local+BLE+Powerhouse;BTHome+V2+Auto-Discovery+%E2%80%A2+Dual-Bank+OTA;~2+Years+Battery+Life+(~30%C2%B5A+Deep+Sleep);128+KB+SPI+Flash+Blackbox+Flight+Recorder;Zero+Cloud+%E2%80%A2+Zero+eWeLink+%E2%80%A2+Instant+Speed" alt="Typing SVG" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=16&pause=1000&color=41BDF5&center=true&vCenter=true&width=580&lines=Sonoff+DW2-Wi-Fi+%E2%86%92+100%25+Local+Bluetooth+Sensor;No+Cloud+%E2%80%A2+No+App+%E2%80%A2+Works+with+Home+Assistant;Batteries+Last+~2+Years;Wireless+Updates+Over+Bluetooth" alt="Typing SVG" />
 </p>
 
 <p align="center">
-  <b>⚡ Liberate your sensor into a 100% local, ultra-low-power BTHome V2 powerhouse</b>
+  <b>Turn your Sonoff DW2 into a 100% private, ultra-low-power door & window sensor for Home Assistant.</b>
 </p>
 
-<!-- Project Status & Specs (Row 1) -->
+<!-- Project Badges -->
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" /></a>
-  <a href="https://www.opulinks.com/"><img src="https://img.shields.io/badge/SoC-Opulinks%20OPL1000%20A2-orange.svg?style=flat-square&logo=arm" alt="SoC" /></a>
-  <a href="https://bthome.io/"><img src="https://img.shields.io/badge/Home%20Assistant-BTHome%20V2-41BDF5.svg?style=flat-square&logo=homeassistant&logoColor=white" alt="BTHome" /></a>
-  <img src="https://img.shields.io/badge/Battery-~2%20Years%20(30µA)-brightgreen.svg?style=flat-square&logo=battery" alt="Battery" />
-  <img src="https://img.shields.io/badge/OTA-Dual--Bank%20Wireless-purple.svg?style=flat-square&logo=bluetooth" alt="OTA" />
-  <img src="https://img.shields.io/badge/GCC%2014.2-Passing%20(0%20errors)-success.svg?style=flat-square&logo=gnu" alt="Build" />
+  <a href="https://bthome.io/"><img src="https://img.shields.io/badge/Home%20Assistant-Native%20Discovery-41BDF5.svg?style=flat-square&logo=homeassistant&logoColor=white" alt="Home Assistant" /></a>
+  <img src="https://img.shields.io/badge/Battery-~2%20Years-brightgreen.svg?style=flat-square&logo=battery" alt="Battery" />
+  <img src="https://img.shields.io/badge/Privacy-100%25%20Local-success.svg?style=flat-square" alt="Local" />
 </p>
 
-<!-- Tech Stack Tags (Row 2) -->
+<!-- Navigation -->
 <p align="center">
-  <img src="https://img.shields.io/badge/C-00599C?style=flat-square&logo=c&logoColor=white" alt="C" />
-  <img src="https://img.shields.io/badge/ARM_Cortex--M3-0091BD?style=flat-square&logo=arm&logoColor=white" alt="ARM" />
-  <img src="https://img.shields.io/badge/Bluetooth_LE_5.0-0082FC?style=flat-square&logo=bluetooth&logoColor=white" alt="BLE" />
-  <img src="https://img.shields.io/badge/Home_Assistant-41BDF5?style=flat-square&logo=homeassistant&logoColor=white" alt="Home Assistant" />
-  <img src="https://img.shields.io/badge/Python_3.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/FreeRTOS-82BE27?style=flat-square&logo=freertos&logoColor=white" alt="FreeRTOS" />
-</p>
-
-<!-- Navigation Bar -->
-<p align="center">
-  <a href="#-key-features">✨ <b>Features</b></a> •
-  <a href="#-quick-comparison-stock-vs-custom">⚖️ <b>Comparison</b></a> •
-  <a href="#-hardware-specifications-pcb-v12">📐 <b>Hardware</b></a> •
-  <a href="#-led-feedback--hardware-button-gestures">🎛️ <b>Gestures</b></a> •
-  <a href="#-quick-start--first-time-flash">🚀 <b>Quick Start</b></a> •
-  <a href="#-wireless-ota-upgrades-over-ble">📡 <b>Wireless OTA</b></a> •
-  <a href="#-cli-tool-reference-toolsdw2_toolpy">🛠️ <b>CLI Tool</b></a> •
-  <a href="#-home-assistant-integration">🏠 <b>Home Assistant</b></a>
+  <a href="#-why-this-project">✨ <b>Why This Project?</b></a> •
+  <a href="#-stock-vs-custom">⚖️ <b>Stock vs Custom</b></a> •
+  <a href="#-home-assistant-setup">🏠 <b>Home Assistant</b></a> •
+  <a href="#-button--led-guide">🎛️ <b>Button & LED</b></a> •
+  <a href="#-how-to-flash">🚀 <b>How to Flash</b></a> •
+  <a href="#-for-developers">🔬 <b>For Developers</b></a>
 </p>
 
 <br/>
@@ -52,64 +38,134 @@
 
 </div>
 
-## 🌟 Key Features
+## ✨ Why This Project?
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="https://img.shields.io/badge/PRIVACY-100%25%20LOCAL-success?style=flat-square" alt="Privacy" /><br/>
-      <b>🛡️ 100% Cloud-Free & Local</b><br/>
-      Operates entirely within your local Bluetooth perimeter. <b>Zero eWeLink accounts</b>, zero cloud servers, and zero internet dependency. Eliminates Wi-Fi pairing dropouts and vendor lock-in forever.
-    </td>
-    <td width="50%" valign="top">
-      <img src="https://img.shields.io/badge/BATTERY-~2%20YEARS-brightgreen?style=flat-square" alt="Battery" /><br/>
-      <b>🔋 Extreme Battery Runtime</b><br/>
-      Wi-Fi radio is permanently switched off in firmware. Deep sleep runs at <b>~30 µA</b> via hardware <code>ps_smart_sleep</code> and 32.768 kHz RTC compensation, delivering <b>~2 years of life</b> on standard AAA cells.
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="https://img.shields.io/badge/INTEGRATION-BTHOME%20V2-blue?style=flat-square" alt="BTHome" /><br/>
-      <b>🏠 Native BTHome V2 Auto-Discovery</b><br/>
-      Broadcasts standard <b>BTHome V2 Door objects (<code>0x1A</code>)</b>. Instantly auto-discovered by <b>Home Assistant</b>, <b>ESPHome BLE Proxies</b>, and <b>Shelly BLU</b> gateways with zero manual YAML.
-    </td>
-    <td width="50%" valign="top">
-      <img src="https://img.shields.io/badge/FIRMWARE-DUAL--BANK%20OTA-purple?style=flat-square" alt="OTA" /><br/>
-      <b>📡 Fail-Safe Wireless BLE OTA</b><br/>
-      True wireless firmware upgrades over Bluetooth GATT (<code>0xAAAA</code>). Dual-Bank architecture toggles between <b>Bank 0</b> and <b>Bank 1</b> with full CRC validation and automatic fallback if interrupted.
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="https://img.shields.io/badge/TELEMETRY-AJAR%20ALERT-red?style=flat-square" alt="Telemetry" /><br/>
-      <b>⏱️ Open Duration & Ajar Warning</b><br/>
-      Measures exact open duration in seconds and emits <code>was_open_Xs</code> upon closing. If left open <b>> 45 seconds</b>, emits a dedicated high-priority ajar alert every 15s to prevent energy waste.
-    </td>
-    <td width="50%" valign="top">
-      <img src="https://img.shields.io/badge/STORAGE-128%20KB%20FLASH-orange?style=flat-square" alt="Storage" /><br/>
-      <b>💾 128 KB Flash Blackbox Recorder</b><br/>
-      Dedicated on-chip SPI Flash circular log stores up to <b>8,192 historical events</b> with timestamps, battery mV, and flags. <b>Survives battery swaps</b> and dumps to CSV via CLI in ~0.5s via binary search.
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="https://img.shields.io/badge/HARDWARE-MULTI--TIER%20S1-blueviolet?style=flat-square" alt="Button" /><br/>
-      <b>🎛️ Multi-Tier Physical Button Actions</b><br/>
-      The onboard <code>S1</code> button serves multiple roles: <b>&lt; 5s</b> opens OTA mode, <b>8–10s</b> executes SoC Hard Reboot, and <b>≥ 15s</b> executes a complete factory format of the blackbox flash memory.
-    </td>
-    <td width="50%" valign="top">
-      <img src="https://img.shields.io/badge/IDENTITY-DYNAMIC%20MAC-informational?style=flat-square" alt="Identity" /><br/>
-      <b>🏷️ Unique Case-Matched BLE Name</b><br/>
-      Advertises dynamically as <b><code>DW2-XXXX</code></b> (e.g. <code>DW2-CDA0</code>) using the device's hardware factory MAC address, perfectly matching the serial sticker printed on the outer plastic casing.
-    </td>
-  </tr>
-</table>
+The original Sonoff DW2-Wi-Fi connects directly to Wi-Fi and the eWeLink cloud, draining two AAA batteries in just 2 to 3 months and having noticeable delay.
+
+This custom firmware transforms the sensor into a pure **Bluetooth (BLE)** smart sensor:
+
+* **🏠 100% Local & Private:** No cloud accounts, no third-party servers, and zero internet dependency. Everything stays private in your home.
+* **🔋 ~2 Years Battery Life:** Eliminates power-hungry Wi-Fi reconnects. Standard AAA batteries last up to 2 years.
+* **⚡ Shows Up Automatically in Home Assistant:** Native BTHome discovery means Home Assistant discovers it as soon as the door opens or closes — no YAML editing required.
+* **📡 Wireless Updates:** After a one-time initial setup, all future firmware updates are flashed wirelessly over Bluetooth.
+* **⏱️ Door Duration & Ajar Warning:** Tells you exactly how long the door was open, and alerts you if left open for more than 45 seconds.
 
 ---
 
-## ⚖️ Quick Comparison: Stock vs Custom
+## ⚖️ Stock vs Custom
 
-## 📐 Hardware Specifications (PCB V1.2)
+| Feature | Stock Sonoff Firmware | Custom Firmware (This Project) |
+|---|---|---|
+| **Privacy** | ❌ Tethered to eWeLink cloud servers | ✅ **100% Local & Private** (Zero cloud dependency) |
+| **Connection** | ⚠️ Wi-Fi (reconnect delay on every event) | ⚡ **Instant Bluetooth** (Immediate response) |
+| **Battery Life** | ❌ 2–3 months on 2× AAA | 🚀 **~2 Years** on standard AAA alkaline cells |
+| **Home Assistant** | ⚠️ Cloud integration or custom tokens | 🏠 **Automatic Auto-Discovery** (Zero configuration) |
+| **Firmware Updates** | ❌ Locked cloud / serial only | 📡 **Wireless Over-The-Air** (No cables needed) |
+
+---
+
+## 🏠 Home Assistant Setup
+
+No custom add-on or YAML configuration is required:
+
+1. Ensure Bluetooth or a Bluetooth Proxy (such as an ESPHome Bluetooth Proxy) is running on your network.
+2. In Home Assistant, go to **Settings -> Devices & Services**.
+3. A notification will appear: **"New device discovered: BTHome"**.
+4. Click **Configure**, and your new door sensor is ready to use!
+
+> [!TIP]
+> If Home Assistant doesn't see it right away, open and close the door once or press the small internal button (`S1`) to wake the sensor.
+
+---
+
+## 🎛️ Button & LED Guide
+
+The sensor has one indicator LED and one small button inside the casing (`S1`):
+
+| Action | How to Trigger | LED Feedback | What Happens |
+|---|---|---|---|
+| **Door Opened** | Separate magnet from sensor | 1 short blink | Broadcasts "Open" state to Home Assistant. |
+| **Door Closed** | Bring magnet back to sensor | 2 short blinks | Broadcasts "Closed" state and how long it was open. |
+| **Update Mode (OTA)** | Press `S1` once (or flick magnet 5 times) | 5 rapid blinks | Opens a 3-minute wireless connection window for updates. |
+| **Hard Reboot** | Hold `S1` for **8–10 seconds** | 1 blink at 8s, then rapid blinks | Safely restarts the sensor without losing any history. |
+| **Factory Reset** | Hold `S1` for **15+ seconds** | LED stays continuously lit | Formats the internal event log and restarts fresh. |
+| **Cancel Action** | Release button between 5–8s or 10–15s | None | Safe cancellation window — nothing changes. |
+
+---
+
+## 🚀 How to Flash
+
+Transitioning from the original firmware requires connecting a USB-to-UART serial adapter **only once** to install the wireless bootloader. After this, all future updates are done **100% wirelessly over Bluetooth**.
+
+<details>
+<summary><b>Step 1: First-time flash (needs a 3.3V USB-to-UART adapter, once)</b></summary>
+<br/>
+
+Solder 4 temporary jumper wires (or use pogo pins) to header `J2` on the back of the DW2 board:
+
+```text
+USB Adapter (3.3V)        Sonoff DW2 PCB (Header J2)
+------------------        --------------------------
+3.3V (VCC)       -------> 3V3
+GND              -------> GND
+RXD              -------> TXD
+TXD              -------> RXD
+```
+
+> [!CAUTION]
+> Use **3.3V logic levels only** (5V will permanently damage the chip). Remove AAA batteries while powering via USB.
+
+1. Open `third_party/OPL1000A2-SDK/Tool/Download/download_RELEASE.exe`.
+2. Select your COM port, Baud rate `115200`.
+3. Choose the firmware file: `third_party/OPL1000A2-SDK/Tool/Download/Patch/opl1000.bin`.
+4. Click **Start**, then connect 3.3V power (or touch `RST` to `GND`). Flashing finishes in ~15 seconds.
+5. Disconnect wires, insert AAA batteries, and close the case.
+
+</details>
+
+<details open>
+<summary><b>Step 2: Future wireless updates (Over-The-Air)</b></summary>
+<br/>
+
+Once the bootloader is installed, you never need serial cables again:
+
+1. Press `S1` once (or flick the magnet 5 times). The LED flashes 5 times.
+2. Run the update command from your computer:
+   ```powershell
+   python tools/dw2_tool.py ota
+   ```
+
+</details>
+
+<details>
+<summary><b>Handy CLI commands (`tools/dw2_tool.py`)</b></summary>
+<br/>
+
+```powershell
+# Live packet monitor & event scanner
+python tools/dw2_tool.py scan --timeout 30
+
+# Synchronize internal clock with computer time
+python tools/dw2_tool.py sync-time
+
+# View the last 20 recorded door events
+python tools/dw2_tool.py dump-logs
+
+# Export complete event history to CSV
+python tools/dw2_tool.py dump-logs --all --out history.csv
+```
+
+</details>
+
+---
+
+## 🔬 For Developers
+
+<details>
+<summary><b>Hardware Architecture, Memory Map, Packet Structure & ESP32 Code</b></summary>
+<br/>
+
+### 📐 Hardware Specifications (PCB V1.2)
 
 ```text
        +---------------------------------------------+
@@ -131,40 +187,14 @@
 | **Magnetic Sensor** | `H1` | Hall Effect switch on `IO5` (Active Low: Magnet present = Closed) |
 | **Maintenance Button** | `S1` | Tactile push button on `IO4` (Active Low) |
 | **Indicator LED** | `LED1` | Surface-mount LED on `IO21` (Active High) |
-| **Battery AuxADC** | Internal | Internal SoC rail measurement + OTP factory regression calibration |
+| **Battery AuxADC** | Internal | Internal rail measurement + OTP factory regression calibration |
 | **Serial Header** | `J2` | 4-pin 2.54mm pitch: `3V3`, `TXD`, `RXD`, `GND` |
 | **Debug UART** | `IO8` | Single-wire 115200 bps Debug UART TX (kernel boot logs) |
 | **Power Source** | — | 2 × AAA Alkaline / NiMH batteries (nominal 3.0 V) |
 
 ---
 
-## 🎛️ LED Feedback & Hardware Button Gestures
-
-### LED Indications
-
-| Pattern | Duration / Cadence | Meaning |
-|---|---|---|
-| **3 Short Blinks** | 80 ms ON / 120 ms OFF | System cold boot / Hardware reset |
-| **1 Blink** | 80 ms ON | Door Opened |
-| **2 Blinks** | 80 ms ON / 120 ms OFF | Door Closed |
-| **5 Rapid Blinks** | 50 ms ON / 70 ms OFF | Maintenance / BLE Connectable OTA Mode Activated (3 min) |
-| **1 Single Blink (at 8s)** | 100 ms ON | Cue: *"Release now to Hard Reboot"* |
-| **10 Rapid Blinks** | 40 ms ON / 40 ms OFF | Hard Reboot sequence executing |
-| **Solid LED (at 15s)** | Continuous ON | Cue: *"Release now to Factory Format Blackbox"* |
-
-### Multi-Tier S1 Button & Magnet Actions
-
-| Action | Hold Duration / Gesture | LED Feedback | Result |
-|---|---|---|---|
-| **Maintenance / OTA** | Press `< 5s` or **5 rapid magnet flicks** | 5 rapid blinks | Opens 3-minute BLE GATT connectable window (`0xAAAA`). |
-| **Abort / Cancel** | Release between `5s` – `8s` | None | Safe cancellation window — no state change. |
-| **Hard Reboot** | Hold `8s` – `10s` | 1 blink at 8s, then 10 rapid blinks | Restarts SoC via `Hal_Sys_SwResetAll_patch()`. Keeps all Flash logs intact. |
-| **Abort / Cancel** | Release between `10s` – `15s` | None | Safe cancellation window. |
-| **Factory Reset** | Hold `≥ 15s` | LED turns solid at 15s | Erases entire 128 KB Flash log (`0x000E0000`–`0x000FFFFF`), resets event counter to 0, and reboots. |
-
----
-
-## 🗺️ SPI Flash Memory Map (1 MB)
+### 🗺️ 1 MB SPI Flash Memory Map
 
 ```text
 0x00000000 +-------------------------------------------------------+
@@ -180,119 +210,22 @@
 0x00077000 +-------------------------------------------------------+
            | Opulinks RF Calibration, MAC & NVS Storage     (420 KB)|
 0x000E0000 +-------------------------------------------------------+
-           | DW2 Blackbox Logger (32 x 4 KB Sectors, 8,192) (128 KB)|
+           | Blackbox Event Logger (32 x 4 KB Sectors, 8,192) (128 KB)|
 0x00100000 +-------------------------------------------------------+
 ```
 
 ---
 
-## 🚀 Quick Start & First-Time Flash
+### 📊 BLE Broadcast Packet Structure
 
-The initial transition from stock eWeLink firmware to custom firmware requires connecting a USB-to-UART adapter once to install the **Dual-Bank Bootloader**. Afterward, all future firmware updates are performed **100% wirelessly over BLE**.
-
-### 1. Serial Pinout & Wiring
-
-Solder four temporary jumper wires or use pogo-pins on the back of the DW2 PCB:
-
-```text
-  USB-to-UART Adapter             Sonoff DW2 PCB (J2 & Test Points)
-  -------------------             ---------------------------------
-  3.3V (VCC)          ----------> 3V3 (on J2 header)
-  GND                 ----------> GND (on J2 header)
-  RXD                 ----------> TXD (on J2 header)
-  TXD                 ----------> RXD (on J2 header)
-  
-  [Optional / Debug]
-  USB RX (2nd TTL)    ----------> IO8 test pad (Debug UART output @ 115200)
-```
-
-> [!CAUTION]
-> Use **3.3V logic levels only**. 5V TTL will permanently damage the OPL1000 SoC. Remove the AAA batteries while powering via USB 3.3V.
-
-### 2. Flashing the Initial Bootloader Image
-
-1. Open `third_party/OPL1000A2-SDK/Tool/Download/download_RELEASE.exe`.
-2. Select your USB COM port, Baud rate `115200`.
-3. Choose the generated complete bootloader package:
-   ```text
-   third_party/OPL1000A2-SDK/Tool/Download/Patch/opl1000.bin
-   ```
-4. Click **Start** in the download tool *before* powering the board.
-5. Connect 3.3V power (or momentarily ground `RST`). The ROM bootloader will catch the sync pattern and flash the full image in ~15 seconds.
-6. Disconnect serial wires, re-insert AAA batteries, and close the case.
-
----
-
-## 📡 Wireless OTA Upgrades Over BLE
-
-Once the Dual-Bank bootloader is installed, you never need serial cables again.
-
-### Step 1: Wake Sensor into Maintenance Mode
-- Press the `S1` button once (or flick the magnet 5 times). The LED blinks 5 times rapidly.
-
-### Step 2: Stream Firmware via CLI
-```powershell
-# Compile firmware and stream wirelessly over BLE
-python tools/dw2_tool.py build
-python tools/dw2_tool.py ota
-```
-
-Output:
-```text
-=== [DW2 BLE OTA] Preparing upgrade ===
-  Firmware: third_party/OPL1000A2-SDK/Tool/Download/Patch/opl1000.bin
-  Size:     122,324 bytes (119.5 KB)
-  Checksum: 0x00A53D19
-  Target:   88:4A:18:EA:CD:A0
-
-[OTA] Scanning for device 88:4A:18:EA:CD:A0 (up to 35s)...
-[OTA] Found device DW2-CDA0 (88:4A:18:EA:CD:A0). Connecting...
-[OTA] Connected successfully!
-[OTA] Device accepted upgrade! Streaming firmware chunks...
-  [==============================] 100.0% (119.5/119.5 KB) @ 1.1 KB/s
-[OTA] All chunks transferred! Finalizing and verifying checksum...
-[SUCCESS] Sensor verified firmware and triggered hardware reboot!
-```
-
----
-
-## 🛠️ CLI Tool Reference (`tools/dw2_tool.py`)
-
-The companion Python CLI provides complete operational control:
-
-```powershell
-# 1. Compile firmware binary with GCC
-python tools/dw2_tool.py build
-
-# 2. Live BLE packet monitor & door event scanner
-python tools/dw2_tool.py scan --timeout 30
-
-# 3. Synchronize RTC internal clock from host PC
-python tools/dw2_tool.py sync-time
-
-# 4. Dump the last 20 historical blackbox entries (takes ~0.5s via binary search)
-python tools/dw2_tool.py dump-logs
-
-# 5. Dump specific count or export full 128 KB log to CSV
-python tools/dw2_tool.py dump-logs -n 50 --out history.csv
-python tools/dw2_tool.py dump-logs --all --out full_blackbox.csv
-
-# 6. Wireless firmware OTA flash
-python tools/dw2_tool.py ota
-```
-
----
-
-## 📊 BLE Broadcast Packet Structure
-
-Every door movement and periodic heartbeat broadcasts a 20-byte payload inside BLE `Manufacturer Specific Data` (`0xFF`):
+Broadcasts inside BLE `Manufacturer Specific Data` (`0xFF`):
 
 | Offset | Field | Type | Description |
 |---|---|---|---|
 | `+0` | Company ID | `uint16_t` | `0xFFFF` (Custom / Experimental) |
 | `+2` | Magic Header | `uint8_t[2]` | `'D'`, `'W'` (`0x44, 0x57`) |
 | `+4` | Protocol Version | `uint8_t` | `0x02` (Epoch timestamp + BTHome V2) |
-| `+5` | Status Flags | `uint8_t` | Bitfield (see below) |
+| `+5` | Status Flags | `uint8_t` | Bitfield: Door Open, Ajar, Low Battery, etc. |
 | `+6` | Event Counter | `uint32_t` | Monotonic sequential counter (anti-replay) |
 | `+10` | Epoch Timestamp | `uint32_t` | Unix Epoch UTC seconds (`0` if unsynced) |
 | `+14` | Battery Voltage | `uint16_t` | Millivolts (e.g. `3050` = 3.05 V) |
@@ -300,31 +233,11 @@ Every door movement and periodic heartbeat broadcasts a 20-byte payload inside B
 | `+18` | BTHome Object ID | `uint8_t` | `0x1A` (Standard BTHome V2 Door Object) |
 | `+19` | BTHome Value | `uint8_t` | `0x00` = Closed, `0x01` = Open |
 
-### Status Flags (`uint8_t` Bitfield)
-
-- `0x01` (**DOOR_OPEN**): `1` = Door Open, `0` = Door Closed.
-- `0x02` (**HEARTBEAT**): `1` = Periodic keepalive ping (every 4 hours).
-- `0x04` (**BUTTON_TEST**): `1` = Event triggered via S1 button press.
-- `0x08` (**DOOR_AJAR**): `1` = Warning! Door has remained open for `> 45s` (repeats every 15s).
-- `0x10` (**TIME_SYNCED**): `1` = RTC clock is synchronized to valid real-world time.
-- `0x20` (**LOW_BATTERY**): `1` = Battery voltage dropped below 2.3 V.
-
 ---
 
-## 🏠 Home Assistant Integration
+### 📟 Standalone ESP32 Receiver C++ Snippet
 
-Because the firmware includes native **BTHome V2** data (`0x1A`), Home Assistant automatically discovers the sensor as soon as it transmits:
-
-1. Ensure Bluetooth or a Bluetooth Proxy (e.g., ESPHome BLE Proxy) is running on your network.
-2. Under **Settings -> Devices & Services**, Home Assistant will show a notification: **"New device discovered: BTHome"**.
-3. Click **Configure** — no passwords, PINs, or cloud accounts required.
-4. The entity `binary_sensor.dw2_xxxx_door` will immediately reflect Open/Closed states.
-
----
-
-## 📟 ESP32 Receiver Integration (`esp32_receiver/`)
-
-For custom ESP32 central controllers (e.g., smart home heating thermostats), a lightweight header-only C++ receiver is provided in `esp32_receiver/dw2_ble_receiver.hpp`:
+A lightweight header-only receiver is in `esp32_receiver/dw2_ble_receiver.hpp`:
 
 ```cpp
 #include "dw2_ble_receiver.hpp"
@@ -336,7 +249,7 @@ void onDoorEvent(const dw2_event_t &evt) {
            evt.mac, evt.is_open ? "OPEN" : "CLOSED", evt.battery_mv, evt.open_duration_sec);
 
     if (evt.is_open && evt.is_ajar) {
-        // Door open > 45s: pause radiator valve in this room!
+        // Door open > 45s: turn off radiator valve
         radiator_turn_off();
     }
 }
@@ -346,6 +259,18 @@ void app_main() {
     receiver.begin();
 }
 ```
+
+---
+
+### 🛠️ Building From Source
+
+Prerequisites: `arm-none-eabi-gcc` 14.2+ and `make`.
+
+```powershell
+python tools/dw2_tool.py build
+```
+
+</details>
 
 ---
 
