@@ -387,6 +387,19 @@ def encap_pkt(cmd_type, payload=b""):
     return struct.pack("<HH", cmd_type, len(payload)) + payload
 
 
+def is_adv_connectable(adv):
+    """Check whether advertisement is connectable across platforms (especially Windows WinRT)."""
+    if hasattr(adv, "platform_data") and adv.platform_data:
+        try:
+            raw = adv.platform_data[1]
+            if hasattr(raw, "adv") and hasattr(raw.adv, "is_connectable"):
+                return bool(raw.adv.is_connectable)
+        except Exception:
+            pass
+    if getattr(adv, "connectable", None) is not None:
+        return bool(adv.connectable)
+    return False
+
 async def find_sensor_with_tips(target_mac, timeout=45.0, tip_after=3.0, require_connectable=False):
     """
     Scans for sensor with real-time feedback:
@@ -398,13 +411,21 @@ async def find_sensor_with_tips(target_mac, timeout=45.0, tip_after=3.0, require
     adv_data_saved = None
     stop_event = asyncio.Event()
 
+    last_burst_notify = 0
+
     def detection_callback(dev, adv):
-        nonlocal device, adv_data_saved
-        if dev.address.upper() == target_mac.upper():
-            is_conn = getattr(adv, "connectable", None)
-            if require_connectable and is_conn is False:
-                # Sensor is broadcasting non-connectable burst, wait for S1 press
-                return
+        nonlocal device, adv_data_saved, last_burst_notify
+        addr_match = dev.address.upper() == target_mac.upper()
+        name_match = bool(dev.name and ("DW2" in dev.name or "CDA0" in dev.name))
+        if addr_match or name_match:
+            conn = is_adv_connectable(adv)
+            if not conn:
+                now = time.time()
+                if (now - last_burst_notify) > 3.0:
+                    last_burst_notify = now
+                    print(f"\n      [SEEN] Heard sensor broadcast (non-connectable)! Press button S1 (5 blinks) for OTA mode...")
+                if require_connectable:
+                    return
             device = dev
             adv_data_saved = adv
             stop_event.set()
@@ -436,11 +457,7 @@ async def find_sensor_with_tips(target_mac, timeout=45.0, tip_after=3.0, require
     if not device:
         return None, False
 
-    is_conn = True
-    if adv_data_saved:
-        conn_attr = getattr(adv_data_saved, "connectable", None)
-        if conn_attr is False:
-            is_conn = False
+    is_conn = is_adv_connectable(adv_data_saved) if adv_data_saved else True
 
     return device, is_conn
 
@@ -477,115 +494,108 @@ async def run_ota(firmware_path, target_mac="88:4A:18:EA:CD:A0", chunk_size=128,
             last_response["data"] = payload
             ack_event.set()
 
-    print(f"[OTA] Scanning for device {target_mac} (up to 45s)...")
-    device, is_conn = await find_sensor_with_tips(target_mac, timeout=45.0, tip_after=3.0, require_connectable=True)
-    if not device:
-        print(f"[ERROR] Device {target_mac} not detected!")
-        print("        Please perform SECRET KNOCK (5 magnet flicks) or PRESS BUTTON S1 to enter OTA mode.")
-        return 1
+    scan_start = time.time()
+    while (time.time() - scan_start) < 300.0:
+        device, is_conn = await find_sensor_with_tips(target_mac, timeout=20.0, tip_after=2.0, require_connectable=False)
+        if not device:
+            continue
 
-    print(f"[OTA] Found device {device.name or target_mac} ({device.address}). Connecting...")
-    if not is_conn:
-        print("      Tip: Sensor is not in Maintenance Mode! Press button S1 or flick magnet 5 times NOW.")
-    try:
-        async with BleakClient(device, timeout=15.0) as client:
-            if not client.is_connected:
-                print(f"[ERROR] Failed to connect to {target_mac}")
-                return 1
+        print(f"\n[OTA] Sensor detected ({device.name or target_mac} - {device.address}). Connecting...")
+        try:
+            async with BleakClient(device, timeout=10.0) as client:
+                if not client.is_connected:
+                    print("[OTA] Connection dropped before handshake. Retrying...")
+                    continue
 
-            print(f"[OTA] Connected successfully!")
-            await client.start_notify(OTA_CHAR_DATA_OUT, notification_handler)
+                print("[OTA] Connected successfully!")
+                await client.start_notify(OTA_CHAR_DATA_OUT, notification_handler)
 
-            # Step 1: Send Upgrade Request
-            ulSignature = 0x4F544173  # 'OTAs'
-            uwProjectId = 1
-            uwChipId = 1
-            uwFirmwareId = 1
-            uwSeqNum = 1
-            hdr_first20 = struct.pack("<IHHHHI", ulSignature, uwProjectId, uwChipId, uwFirmwareId, uwSeqNum, fw_size) + struct.pack("<I", fw_csum)
-            ulHeaderSum = sum(hdr_first20) & 0xFFFFFFFF
-            ota_hdr = hdr_first20 + struct.pack("<I", ulHeaderSum)
-            upgrade_payload = struct.pack("<H", rx_pkt_ack) + ota_hdr
-
-            ack_event.clear()
-            await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_OTA_UPGRADE, upgrade_payload), response=False)
-            try:
-                await asyncio.wait_for(ack_event.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
-                print("[ERROR] Timeout waiting for OTA_UPGRADE response from device.")
-                return 1
-
-            if last_response["type"] != RSP_OTA_UPGRADE or last_response["status"] != 0:
-                print(f"[ERROR] Device rejected upgrade: type=0x{last_response['type']:04X} status={last_response['status']}")
-                return 1
-
-            print("[OTA] Device accepted upgrade! Streaming firmware chunks...")
-
-            # Step 2: Stream raw chunks
-            offset = 0
-            sent_packets = 0
-            start_time = time.time()
-
-            while offset < fw_size:
-                chunk = fw_data[offset:offset + chunk_size]
-                offset += len(chunk)
-                sent_packets += 1
+                # Step 1: Send Upgrade Request
+                ulSignature = 0x4F544173  # 'OTAs'
+                uwProjectId = 1
+                uwChipId = 1
+                uwFirmwareId = 1
+                uwSeqNum = 1
+                hdr_first20 = struct.pack("<IHHHHI", ulSignature, uwProjectId, uwChipId, uwFirmwareId, uwSeqNum, fw_size) + struct.pack("<I", fw_csum)
+                ulHeaderSum = sum(hdr_first20) & 0xFFFFFFFF
+                ota_hdr = hdr_first20 + struct.pack("<I", ulHeaderSum)
+                upgrade_payload = struct.pack("<H", rx_pkt_ack) + ota_hdr
 
                 ack_event.clear()
-                await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_OTA_RAW, chunk), response=False)
-
-                # Wait for ACK every rx_pkt_ack packets or at EOF
-                if (sent_packets % rx_pkt_ack == 0) or (offset >= fw_size):
-                    try:
-                        await asyncio.wait_for(ack_event.wait(), timeout=5.0)
-                    except asyncio.TimeoutError:
-                        print(f"\n[ERROR] Timeout waiting for chunk ACK at offset {offset}/{fw_size}")
-                        return 1
-
-                pct = (offset / fw_size) * 100.0
-                elapsed = time.time() - start_time
-                speed = (offset / 1024.0) / elapsed if elapsed > 0 else 0
-                bar_len = 30
-                filled = int(bar_len * offset // fw_size)
-                bar = "=" * filled + ">" + " " * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-                print(f"\r  [{bar}] {pct:5.1f}% ({offset / 1024:.1f}/{fw_size / 1024:.1f} KB) @ {speed:.1f} KB/s", end="", flush=True)
-
-            print("\n[OTA] All chunks transferred! Finalizing and verifying checksum...")
-
-            # Step 2.5: Synchronize Time directly during OTA connection
-        try:
-            cur_epoch = int(time.time())
-            await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_TIME_SYNC, struct.pack("<I", cur_epoch)), response=False)
-            print(f"[OTA] Synchronized RTC clock to {datetime.fromtimestamp(cur_epoch)}...")
-            await asyncio.sleep(0.3)
-        except Exception as e:
-            print(f"[OTA] Time sync note: {e}")
-
-        # Step 3: Send End Request & Wait for ACK or Disconnect
-            ack_event.clear()
-            try:
-                await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_OTA_END, b"\x00"), response=False)
+                await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_OTA_UPGRADE, upgrade_payload), response=False)
                 try:
-                    await asyncio.wait_for(ack_event.wait(), timeout=6.0)
+                    await asyncio.wait_for(ack_event.wait(), timeout=5.0)
                 except asyncio.TimeoutError:
-                    pass
-                print("\n[SUCCESS] Firmware transfer & checksum verification completed!")
-                print("[SUCCESS] Sensor successfully upgraded and rebooted into the new firmware!")
-                return 0
-            except Exception as e:
-                print("\n[SUCCESS] Sensor verified firmware and triggered hardware reboot!")
-                return 0
+                    print("[ERROR] Timeout waiting for OTA_UPGRADE response from device.")
+                    continue
 
-    except Exception as e:
-        err_type = type(e).__name__
-        err_text = str(e).strip()
-        if isinstance(e, (asyncio.TimeoutError, TimeoutError)) or "timeout" in err_type.lower() or not err_text:
-            print("\n[ERROR] Connection timed out!")
-            print("        The sensor was in non-connectable broadcast mode or asleep.")
-            print("        Tip: Press button S1 or do 5 rapid magnet flicks before initiating OTA.")
-        else:
-            print(f"\n[ERROR] OTA failure ({err_type}): {err_text}")
-        return 1
+                if last_response["type"] != RSP_OTA_UPGRADE or last_response["status"] != 0:
+                    print(f"[ERROR] Device rejected upgrade: type=0x{last_response['type']:04X} status={last_response['status']}")
+                    return 1
+
+                print("[OTA] Device accepted upgrade! Streaming firmware chunks...")
+
+                # Step 2: Stream raw chunks
+                offset = 0
+                sent_packets = 0
+                start_time = time.time()
+
+                while offset < fw_size:
+                    chunk = fw_data[offset:offset + chunk_size]
+                    offset += len(chunk)
+                    sent_packets += 1
+
+                    ack_event.clear()
+                    await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_OTA_RAW, chunk), response=False)
+
+                    # Wait for ACK every rx_pkt_ack packets or at EOF
+                    if (sent_packets % rx_pkt_ack == 0) or (offset >= fw_size):
+                        try:
+                            await asyncio.wait_for(ack_event.wait(), timeout=12.0)
+                        except asyncio.TimeoutError:
+                            print(f"\n[ERROR] Timeout waiting for chunk ACK at offset {offset}/{fw_size}")
+                            return 1
+
+                    pct = (offset / fw_size) * 100.0
+                    elapsed = time.time() - start_time
+                    speed = (offset / 1024.0) / elapsed if elapsed > 0 else 0
+                    bar_len = 30
+                    filled = int(bar_len * offset // fw_size)
+                    bar = "=" * filled + ">" + " " * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
+                    print(f"\r  [{bar}] {pct:5.1f}% ({offset / 1024:.1f}/{fw_size / 1024:.1f} KB) @ {speed:.1f} KB/s", end="", flush=True)
+
+                print("\n[OTA] All chunks transferred! Finalizing and verifying checksum...")
+
+                # Step 2.5: Synchronize Time directly during OTA connection
+                try:
+                    cur_epoch = int(time.time())
+                    await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_TIME_SYNC, struct.pack("<I", cur_epoch)), response=False)
+                    print(f"[OTA] Synchronized RTC clock to {datetime.fromtimestamp(cur_epoch)}...")
+                    await asyncio.sleep(0.3)
+                except Exception as e:
+                    print(f"[OTA] Time sync note: {e}")
+
+                # Step 3: Send End Request & Wait for ACK or Disconnect
+                ack_event.clear()
+                try:
+                    await client.write_gatt_char(OTA_CHAR_DATA_IN, encap_pkt(CMD_OTA_END, b"\x00"), response=False)
+                    try:
+                        await asyncio.wait_for(ack_event.wait(), timeout=6.0)
+                    except asyncio.TimeoutError:
+                        pass
+                    print("\n[SUCCESS] Firmware transfer & checksum verification completed!")
+                    print("[SUCCESS] Sensor successfully upgraded and rebooted into the new firmware!")
+                    return 0
+                except Exception as e:
+                    print("\n[SUCCESS] Sensor verified firmware and triggered hardware reboot!")
+                    return 0
+        except Exception as e:
+            err_type = type(e).__name__
+            print(f"[OTA] Waiting for S1 Maintenance Mode (connection note: {err_type}). Retrying scan...")
+            await asyncio.sleep(0.5)
+
+    print("\n[ERROR] OTA scanning timed out after 5 minutes.")
+    return 1
 
 
 async def run_sync_time(target_mac="88:4A:18:EA:CD:A0"):
@@ -637,11 +647,12 @@ async def run_dump_logs(target_mac="88:4A:18:EA:CD:A0", out_csv=None, count=20, 
     """Downloads blackbox logs from DW2 sensor over BLE (default: last 20 entries)."""
     limit_str = "ALL" if dump_all else f"last {count}"
     print(f"=== [DW2 LOG DUMP] Target: {target_mac} ({limit_str} entries) ===")
-    print("[1/4] Scanning for sensor BLE advertisement (up to 35s)...")
+    print("[1/4] Scanning for sensor BLE advertisement (up to 120s)...")
+    print("      -> Apasa scurt pe butonul S1 de pe senzor pentru a permite descarcarea!")
 
-    device, is_conn = await find_sensor_with_tips(target_mac, timeout=35.0, tip_after=3.0)
+    device, is_conn = await find_sensor_with_tips(target_mac, timeout=120.0, tip_after=3.0, require_connectable=True)
     if not device:
-        print(f"\n[ERROR] Device {target_mac} not detected within 35 seconds!")
+        print(f"\n[ERROR] Device {target_mac} not detected within 120 seconds!")
         print("        Ensure battery is inserted, then press button S1 to wake.")
         return 1
 
@@ -791,9 +802,9 @@ def cmd_ota(args):
         print("Error: bleak is required. Run: pip install bleak")
         return 1
 
-    # Default to auto-built opl1000.bin if not specified
+    # Default to dw2_ble.bin (the actual patch binary for OTA bank)
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    default_fw = os.path.join(repo_root, "third_party", "OPL1000A2-SDK", "Tool", "Download", "Patch", "opl1000.bin")
+    default_fw = os.path.join(repo_root, "firmware", "Output-GCC", "dw2_ble.bin")
     fw_path = args.firmware or default_fw
     target_mac = args.mac or "88:4A:18:EA:CD:A0"
 
@@ -828,6 +839,64 @@ def cmd_dump_logs(args):
         return 1
 
 
+def cmd_gui(args):
+    """Launches the DW2 Web Companion Dashboard in the browser."""
+    import http.server
+    import socketserver
+    import webbrowser
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    web_dir = os.path.join(repo_root, "web")
+    if not os.path.isdir(web_dir):
+        print(f"[ERROR] Web dashboard directory not found at {web_dir}")
+        return 1
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, directory=web_dir, **kw)
+
+        def log_message(self, format, *args):
+            pass
+
+    port = args.port
+    url = f"http://localhost:{port}"
+    print(f"=== [DW2 GUI] Sonoff DW2 Pro Web Companion Dashboard ===")
+    print(f"  Serving dashboard at: {url}")
+    print(f"  Directory: {web_dir}")
+    print(f"  Press Ctrl+C to stop the local web server.\n")
+
+    try:
+        with socketserver.TCPServer(("", port), Handler) as httpd:
+            webbrowser.open(url)
+            httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[DW2 GUI] Server stopped.")
+        return 0
+    except OSError as e:
+        print(f"[ERROR] Could not start server on port {port}: {e}")
+        return 1
+
+
+def cmd_flash(args):
+    """Flashes firmware via USB-TTL serial using opl1000_flasher."""
+    from opl1000_flasher import Opl1000Flasher, auto_detect_port
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    bin_path = args.file or os.path.join(repo_root, "third_party", "OPL1000A2-SDK", "Tool", "Download", "Patch", "opl1000.bin")
+
+    port = args.port
+    if not port or port.lower() == "auto":
+        port = auto_detect_port()
+        if not port:
+            print("[ERROR] Nu s-a detectat niciun port serial USB automat! Specificati --port COMx")
+            return 1
+        print(f"[AUTO-DETECT] Port serial identificat: {port}")
+
+    flasher = Opl1000Flasher(port, args.baud)
+    success = flasher.flash(bin_path)
+    return 0 if success else 1
+
+
 def cmd_scan(args):
     """Command wrapper for BLE scanning."""
     if not HAS_BLEAK:
@@ -844,6 +913,18 @@ def cmd_scan(args):
 def main():
     parser = argparse.ArgumentParser(description="Sonoff DW2-Wi-Fi Custom BLE Firmware Manager")
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
+
+    # GUI
+    p_gui = subparsers.add_parser("gui", help="Launch the local Web Companion Dashboard in your browser")
+    p_gui.add_argument("--port", "-p", type=int, default=8080, help="Local HTTP port (default: 8080)")
+    p_gui.set_defaults(func=cmd_gui)
+
+    # Flash via USB-TTL
+    p_flash = subparsers.add_parser("flash", help="Flash firmware via USB-TTL serial (OPL1000 bootloader)")
+    p_flash.add_argument("--port", "-p", default=None, help="Serial COM port (default: auto-detect)")
+    p_flash.add_argument("--baud", "-b", type=int, default=115200, help="Baud rate (default: 115200)")
+    p_flash.add_argument("--file", "-f", default=None, help="Firmware binary path")
+    p_flash.set_defaults(func=cmd_flash)
 
     # Build
     p_build = subparsers.add_parser("build", help="Build firmware with ARM GCC")
@@ -868,7 +949,7 @@ def main():
 
     # OTA Update
     p_ota = subparsers.add_parser("ota", help="Over-The-Air (OTA) firmware upgrade via BLE")
-    p_ota.add_argument("firmware", nargs="?", help="Path to firmware binary (defaults to auto-built opl1000.bin)")
+    p_ota.add_argument("firmware", nargs="?", help="Path to firmware binary (defaults to dw2_ble.bin)")
     p_ota.add_argument("--mac", "-m", default="88:4A:18:EA:CD:A0", help="Target MAC address")
     p_ota.add_argument("--chunk", "-c", type=int, default=128, help="Chunk size in bytes (default: 128)")
     p_ota.add_argument("--ack", "-a", type=int, default=4, help="Packets per ACK (default: 4)")
@@ -880,7 +961,7 @@ def main():
     p_time.set_defaults(func=cmd_sync_time)
 
     # Dump Logs
-    p_dump = subparsers.add_parser("dump-logs", help="Dump 128 KB SPI Flash blackbox history over BLE")
+    p_dump = subparsers.add_parser("dump-logs", aliases=["logs"], help="Dump 128 KB SPI Flash blackbox history over BLE")
     p_dump.add_argument("--mac", "-m", default="88:4A:18:EA:CD:A0", help="Target MAC address")
     p_dump.add_argument("--csv", help="Export logs to CSV file")
     p_dump.add_argument("--count", "-n", type=int, default=20, help="Number of recent logs to fetch (default: 20)")

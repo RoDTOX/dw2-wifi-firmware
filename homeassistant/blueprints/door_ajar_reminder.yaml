@@ -1,0 +1,74 @@
+blueprint:
+  name: "Sonoff DW2 — Door Left Ajar Alert & Reminder"
+  description: >
+    Sends notifications (and optional TTS announcements) when a door, window, or refrigerator
+    fitted with Sonoff DW2 is left open longer than expected. Can repeat alerts until closed.
+  domain: automation
+  input:
+    door_sensor:
+      name: Door Sensor
+      description: The Sonoff DW2 BTHome door sensor.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: door
+    warning_delay:
+      name: Warning Delay (seconds)
+      description: How long the door can stay open before raising an alarm.
+      default: 60
+      selector:
+        number:
+          min: 15
+          max: 600
+          unit_of_measurement: seconds
+    repeat_interval:
+      name: Repeat Reminder (minutes)
+      description: Minutes to wait before re-alerting if door is still open (0 to notify only once).
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 30
+          unit_of_measurement: minutes
+    notify_device:
+      name: Mobile App Notification Target
+      description: The phone or tablet to receive the push notification.
+      selector:
+        device:
+          integration: mobile_app
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input door_sensor
+    to: "on"
+    for:
+      seconds: !input warning_delay
+
+action:
+  - repeat:
+      while:
+        - condition: state
+          entity_id: !input door_sensor
+          state: "on"
+      sequence:
+        - domain: mobile_app
+          type: notify
+          device_id: !input notify_device
+          title: "⚠️ Door Left Ajar Warning"
+          message: >-
+            {{ state_attr(door_sensor.entity_id, 'friendly_name') | default('Door') }} has been open for more than {{ warning_delay }} seconds!
+          data:
+            tag: "dw2_door_ajar_{{ states[door_sensor.entity_id].object_id }}"
+            group: "door-security"
+            importance: high
+        - if:
+            - condition: template
+              value_template: "{{ (repeat_interval | int) > 0 }}"
+          then:
+            - delay:
+                minutes: !input repeat_interval
+          else:
+            - stop: "Single notification delivered."

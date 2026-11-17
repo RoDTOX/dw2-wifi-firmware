@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sonoff DW2 Pro — Companion Dashboard & BLE Toolkit</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚪</text></svg>">
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card-bg: rgba(18, 24, 38, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #10b981;
+      --primary-glow: rgba(16, 185, 129, 0.25);
+      --accent: #06b6d4;
+      --warn: #f59e0b;
+      --warn-glow: rgba(245, 158, 11, 0.25);
+      --danger: #ef4444;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body {
+      background: radial-gradient(circle at 50% 0%, #152238 0%, var(--bg) 70%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+    }
+    .container { max-width: 1200px; margin: 0 auto; width: 100%; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .logo-group { display: flex; align-items: center; gap: 0.75rem; }
+    .logo-badge {
+      background: linear-gradient(135deg, #059669, #0d9488);
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; box-shadow: 0 4px 14px var(--primary-glow);
+    }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { font-size: 0.85rem; color: var(--text-muted); }
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border);
+      padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 500;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #6b7280;
+      box-shadow: 0 0 8px rgba(107, 114, 128, 0.5);
+    }
+    .status-dot.connected { background: #10b981; box-shadow: 0 0 10px #10b981; }
+    .status-dot.connecting { background: #f59e0b; box-shadow: 0 0 10px #f59e0b; animation: pulse 1.5s infinite; }
+    
+    .btn {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff; border: none; padding: 0.65rem 1.25rem;
+      border-radius: 10px; font-weight: 600; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      transition: all 0.2s ease; font-size: 0.9rem;
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+    .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid var(--card-border);
+      color: var(--text); box-shadow: none;
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.12); }
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+    }
+
+    /* Grid Layout */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 1.25rem;
+    }
+    .card-title {
+      font-size: 1.05rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;
+    }
+
+    /* Door Visualizer */
+    .door-display {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 2rem 1rem; border-radius: 12px;
+      background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.03);
+      transition: all 0.3s ease;
+    }
+    .door-icon-wrap {
+      font-size: 4rem; margin-bottom: 0.75rem;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .door-state-text {
+      font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em;
+    }
+    .door-open {
+      color: var(--warn);
+      text-shadow: 0 0 20px var(--warn-glow);
+    }
+    .door-closed {
+      color: var(--primary);
+      text-shadow: 0 0 20px var(--primary-glow);
+    }
+
+    /* Metrics Row */
+    .metric-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.75rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .metric-row:last-child { border-bottom: none; }
+    .metric-label { font-size: 0.85rem; color: var(--text-muted); }
+    .metric-val { font-size: 0.95rem; font-weight: 600; font-family: monospace; }
+
+    /* Progress bar */
+    .progress-bar {
+      width: 100%; height: 10px; background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px; overflow: hidden; margin: 1rem 0;
+    }
+    .progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #10b981, #06b6d4);
+      transition: width 0.2s ease;
+    }
+
+    /* Table */
+    .table-container {
+      max-height: 340px; overflow-y: auto; margin-top: 1rem;
+      border: 1px solid var(--card-border); border-radius: 10px;
+    }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; }
+    th {
+      background: rgba(255, 255, 255, 0.04); padding: 0.75rem;
+      font-weight: 600; color: var(--text-muted); position: sticky; top: 0;
+      border-bottom: 1px solid var(--card-border);
+    }
+    td { padding: 0.65rem 0.75rem; border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    /* Dropzone */
+    .dropzone {
+      border: 2px dashed rgba(255, 255, 255, 0.15); border-radius: 12px;
+      padding: 2rem 1rem; text-align: center; cursor: pointer;
+      transition: all 0.2s ease; background: rgba(0, 0, 0, 0.15);
+    }
+    .dropzone:hover {
+      border-color: var(--primary); background: rgba(16, 185, 129, 0.05);
+    }
+
+    /* Notice banner */
+    .notice {
+      background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.2);
+      border-radius: 10px; padding: 0.85rem 1rem; font-size: 0.85rem;
+      display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.5rem;
+    }
+    .notice-icon { font-size: 1.2rem; }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    
+    footer {
+      margin-top: auto; padding-top: 2rem; border-top: 1px solid var(--card-border);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.8rem; color: var(--text-muted); flex-wrap: wrap; gap: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-group">
+        <div class="logo-badge">🚪</div>
+        <div>
+          <h1>Sonoff DW2 Pro Toolkit</h1>
+          <div class="subtitle">100% Local BTHome V2 · Dual-Bank OTA · 128KB Blackbox Flight Recorder</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <div class="status-badge">
+          <div id="statusDot" class="status-dot"></div>
+          <span id="statusText">Disconnected</span>
+        </div>
+        <button id="btnConnect" class="btn" onclick="toggleConnect()">
+          <span>🔗</span> Connect Device
+        </button>
+      </div>
+    </header>
+
+    <div class="notice">
+      <div class="notice-icon">💡</div>
+      <div>
+        <strong>Connection Guide:</strong> Senzorul este ultra-low-power și doarme în mod normal.<br>
+        <strong>1.</strong> Apasă scurt pe <strong>butonul S1</strong> (sau execută cele <strong>5 bătăi rapide de magnet</strong>). LED-ul va clipi de 5 ori, deschizând fereastra de conectare timp de 3 minute.<br>
+        <strong>2.</strong> Dă click pe <strong>Connect Device</strong> imediat și alege <code>DW2-CDA0</code> din lista Chrome.<br>
+        <strong>3.</strong> Dacă Windows afișează notificare de asociere (Pairing), apasă <em>Allow / Conectare</em>.
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- Card 1: Live Status -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>📡</span> Live Sensor State</div>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">BTHome V2 Active</span>
+        </div>
+        <div id="doorDisplay" class="door-display">
+          <div id="doorIcon" class="door-icon-wrap">🚪</div>
+          <div id="doorText" class="door-state-text door-closed">WAITING</div>
+          <div id="doorSubtext" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">Connect to inspect live state</div>
+        </div>
+        <div style="margin-top: 1.25rem;">
+          <div class="metric-row">
+            <span class="metric-label">Device Name</span>
+            <span id="valName" class="metric-val">DW2-CDA0</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Battery Level</span>
+            <span id="valBattery" class="metric-val">-- %</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Battery Voltage</span>
+            <span id="valVoltage" class="metric-val">-- mV</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Event Counter</span>
+            <span id="valCounter" class="metric-val"># --</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Signal Strength (RSSI)</span>
+            <span id="valRssi" class="metric-val">-- dBm</span>
+          </div>
+          <div class="metric-row">
+            <span class="metric-label">Last Seen</span>
+            <span id="valLastSeen" class="metric-val">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: RTC Clock Sync -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>⏰</span> RTC Real-Time Clock</div>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">CTS 0x1805</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          The DW2 sensor features an internal 32.768 kHz RTC. Synchronizing it with your PC or phone ensures every door opening in the 128 KB flight recorder receives an authoritative Unix epoch timestamp.
+        </p>
+        <div class="metric-row">
+          <span class="metric-label">Host PC Clock</span>
+          <span id="hostTime" class="metric-val">--</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Sensor RTC Status</span>
+          <span id="rtcStatus" class="metric-val">Not synced</span>
+        </div>
+        <div style="margin-top: 1.5rem;">
+          <button id="btnSyncTime" class="btn" style="width: 100%; justify-content: center;" onclick="syncRtcTime()" disabled>
+            <span>⚡</span> Sync Sensor Clock to Host
+          </button>
+        </div>
+      </div>
+
+      <!-- Card 3: Wireless Dual-Bank OTA -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span>🚀</span> Wireless Dual-Bank OTA</div>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">GATT 0xAAAA</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Flash compiled binaries (<code>dw2_ble.bin</code>) wirelessly over Bluetooth with zero physical cables.
+        </p>
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+          <input type="file" id="fileInput" accept=".bin" style="display: none;" onchange="handleFileSelect(event)">
+          <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">📦</div>
+          <div style="font-weight: 600; font-size: 0.9rem;" id="fileNameText">Select or Drop Firmware (.bin)</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);" id="fileSizeText">e.g. firmware/Output-GCC/dw2_ble.bin</div>
+        </div>
+        <div class="progress-bar">
+          <div id="otaProgress" class="progress-fill"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
+          <span id="otaStatusText">Idle</span>
+          <span id="otaPctText">0%</span>
+        </div>
+        <div style="margin-top: 1rem;">
+          <button id="btnStartOta" class="btn" style="width: 100%; justify-content: center;" onclick="startOtaUpgrade()" disabled>
+            <span>⚡</span> Start Wireless Upgrade
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Blackbox Card: Full Width -->
+    <div class="card" style="margin-bottom: 2rem;">
+      <div class="card-header">
+        <div>
+          <div class="card-title"><span>📋</span> 128 KB SPI Flash Blackbox Flight Recorder</div>
+          <div class="subtitle" style="margin-top: 0.25rem;">Circular ring buffer storing up to 8,192 persistent hardware events at 0x000E0000</div>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="btnFetchLogs" class="btn btn-secondary" onclick="fetchBlackboxLogs()" disabled>
+            <span>📥</span> Download Events
+          </button>
+          <button id="btnExportCsv" class="btn btn-secondary" onclick="exportCsv()" disabled>
+            <span>💾</span> Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th># Counter</th>
+              <th>Timestamp</th>
+              <th>Event State</th>
+              <th>Open Duration</th>
+              <th>Battery (mV)</th>
+              <th>Flags</th>
+            </tr>
+          </thead>
+          <tbody id="logTableBody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                Connect sensor in maintenance mode and click "Download Events" to view flight recorder history.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Home Assistant Integration Quick-Cards -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>🏠</span> Home Assistant Automation Blueprints</div>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">100% Local BTHome V2</span>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+        Import our verified, pre-built Home Assistant automation blueprints directly into your installation:
+      </p>
+      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-bottom: 0;">
+        <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 10px; border: 1px solid var(--card-border);">
+          <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem;">🌡️ Smart Heating Window Cutoff</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Turns off or drops temperature when door/window opens > 30s. Automatically restores previous comfort heating when closed.
+          </p>
+          <button class="btn btn-secondary" style="font-size: 0.8rem; width: 100%; justify-content: center;" onclick="copyBlueprintPath('smart_heating_window_cutoff.yaml')">
+            📋 Copy Blueprint Path
+          </button>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 10px; border: 1px solid var(--card-border);">
+          <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem;">⚠️ Door Ajar Critical Alert</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Sends notification or TTS announcement if front door or refrigerator remains open > 45s.
+          </p>
+          <button class="btn btn-secondary" style="font-size: 0.8rem; width: 100%; justify-content: center;" onclick="copyBlueprintPath('door_ajar_reminder.yaml')">
+            📋 Copy Blueprint Path
+          </button>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 10px; border: 1px solid var(--card-border);">
+          <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem;">🔋 Low Battery Monitor</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Triggers proactive notification before cell depletion when voltage drops below 2.4V or 20%.
+          </p>
+          <button class="btn btn-secondary" style="font-size: 0.8rem; width: 100%; justify-content: center;" onclick="copyBlueprintPath('dw2_battery_monitor.yaml')">
+            📋 Copy Blueprint Path
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>Sonoff DW2 Liberated Firmware · Opulinks OPL1000 SoC · Open Source Architecture</div>
+      <div>Designed for 100% Local Home Assistant Integration & Privacy</div>
+    </footer>
+  </div>
+
+  <script>
+    // UUID Constants
+    const UUID_SVC_OTA = "0000aaaa-0000-1000-8000-00805f9b34fb";
+    const UUID_CHAR_DATA_IN = "0000bbb0-0000-1000-8000-00805f9b34fb";
+    const UUID_CHAR_DATA_OUT = "0000bbb1-0000-1000-8000-00805f9b34fb";
+    const UUID_SVC_CTS = "00001805-0000-1000-8000-00805f9b34fb";
+    const UUID_CHAR_CTS_TIME = "00002a2b-0000-1000-8000-00805f9b34fb";
+
+    let bleDevice = null;
+    let bleServer = null;
+    let charDataIn = null;
+    let charDataOut = null;
+    let selectedFileBytes = null;
+    let downloadedEvents = [];
+
+    // Real-time host clock
+    setInterval(() => {
+      document.getElementById('hostTime').textContent = new Date().toLocaleTimeString();
+    }, 1000);
+
+    function updateUiState(connected, connecting = false) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      const btn = document.getElementById('btnConnect');
+
+      dot.className = "status-dot" + (connected ? " connected" : connecting ? " connecting" : "");
+      text.textContent = connected ? "Connected" : connecting ? "Connecting..." : "Disconnected";
+      btn.className = "btn" + (connected ? " btn-danger" : "");
+      btn.innerHTML = connected ? "<span>❌</span> Disconnect" : "<span>🔗</span> Connect Device";
+
+      document.getElementById('btnSyncTime').disabled = !connected;
+      document.getElementById('btnFetchLogs').disabled = !connected;
+      document.getElementById('btnStartOta').disabled = !connected || !selectedFileBytes;
+    }
+
+    async function toggleConnect() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        bleDevice.gatt.disconnect();
+        updateUiState(false);
+        return;
+      }
+
+      if (!navigator.bluetooth) {
+        alert("Web Bluetooth is not supported or enabled in this browser. Please use Google Chrome, Microsoft Edge, or Android Chrome.");
+        return;
+      }
+
+      const statusText = document.getElementById('statusText');
+      try {
+        updateUiState(false, true);
+        statusText.textContent = "Selecting device...";
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: "DW2" }],
+          optionalServices: [UUID_SVC_OTA, UUID_SVC_CTS]
+        });
+
+        bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+        statusText.textContent = "Connecting GATT...";
+        bleServer = await bleDevice.gatt.connect();
+
+        // Give Windows WinRT stack time to complete handshake & cache GATT table
+        statusText.textContent = "Stabilizing (500ms)...";
+        await new Promise(r => setTimeout(r, 600));
+
+        // Get OTA Service with retry for Windows WinRT race conditions
+        statusText.textContent = "Discovering services...";
+        let otaService = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            if (!bleDevice.gatt.connected) {
+              statusText.textContent = `Reconnecting (${attempt}/3)...`;
+              await bleDevice.gatt.connect();
+              await new Promise(r => setTimeout(r, 600));
+            }
+            otaService = await bleServer.getPrimaryService(UUID_SVC_OTA);
+            if (otaService) break;
+          } catch (e) {
+            console.warn(`GATT discovery attempt ${attempt} failed:`, e);
+            if (attempt === 3) throw e;
+            await new Promise(r => setTimeout(r, 800));
+          }
+        }
+
+        charDataIn = await otaService.getCharacteristic(UUID_CHAR_DATA_IN);
+        charDataOut = await otaService.getCharacteristic(UUID_CHAR_DATA_OUT);
+
+        await new Promise(r => setTimeout(r, 200));
+        await charDataOut.startNotifications();
+        charDataOut.addEventListener('characteristicvaluechanged', onNotification);
+
+        updateUiState(true);
+        document.getElementById('valName').textContent = bleDevice.name || "DW2-CDA0";
+        document.getElementById('doorText').textContent = "CONNECTED";
+        document.getElementById('doorText').className = "door-state-text door-closed";
+        document.getElementById('doorSubtext').textContent = "Reading telemetry...";
+        document.getElementById('valRssi').textContent = "Connected (BLE Active)";
+
+        // Auto-sync clock
+        await syncRtcTime();
+
+        // Auto-fetch live telemetry from sensor
+        await fetchLatestStatus();
+
+        // Listen for live advertisements if browser supports it
+        try {
+          if (bleDevice.watchAdvertisements) {
+            await bleDevice.watchAdvertisements();
+            bleDevice.addEventListener('advertisementreceived', (evt) => {
+              if (evt.rssi) {
+                let q = evt.rssi > -60 ? "Excellent" : evt.rssi > -75 ? "Good" : "Fair";
+                document.getElementById('valRssi').textContent = `${evt.rssi} dBm (${q})`;
+              }
+            });
+          }
+        } catch (_) {}
+      } catch (err) {
+        console.error("Connection failed:", err);
+        updateUiState(false);
+        if (err.name !== "NotFoundError") {
+          alert("Eroare la conectare: " + err.message + 
+                "\n\nInstrucțiuni importante Windows:" +
+                "\n1. Asigură-te că ai apăsat scurt butonul S1 de pe senzor (LED-ul trebuie să clipească de 5 ori)." +
+                "\n2. Dacă Windows afișează o notificare de 'Pairing' / 'Asociere', dă click pe Allow / Conectare." +
+                "\n3. Conectează-te în timp ce LED-ul clipește sau în primele 3 minute după apăsare.");
+        }
+      }
+    }
+
+    function onDisconnected() {
+      updateUiState(false);
+      document.getElementById('doorText').textContent = "DISCONNECTED";
+      document.getElementById('doorText').className = "door-state-text";
+      document.getElementById('doorSubtext').textContent = "Connect to inspect live state";
+    }
+
+    let otaAckResolver = null;
+    let logDumpResolver = null;
+
+    function onNotification(event) {
+      const val = event.target.value;
+      if (val.byteLength < 4) return;
+
+      const type = val.getUint16(0, true);
+      const len = val.getUint16(2, true);
+
+      // Handle OTA ACK
+      if (type === 0x1101 || type === 0x1102 || type === 0x1103) {
+        if (otaAckResolver) {
+          const status = len > 0 ? val.getUint8(4) : 0;
+          otaAckResolver(status);
+          otaAckResolver = null;
+        }
+      }
+
+      // Handle Log Dump Response
+      if (type === 0x1301) {
+        if (logDumpResolver) {
+          const payload = new Uint8Array(val.buffer, 4, len);
+          logDumpResolver(payload);
+          logDumpResolver = null;
+        }
+      }
+    }
+
+    async function syncRtcTime() {
+      if (!charDataIn) return;
+      const epochNow = Math.floor(Date.now() / 1000);
+      const pkt = new Uint8Array(8);
+      const view = new DataView(pkt.buffer);
+      view.setUint16(0, 0x0300, true); // CMD_TIME_SYNC
+      view.setUint16(2, 4, true);      // len: 4
+      view.setUint32(4, epochNow, true);
+
+      try {
+        await charDataIn.writeValue(pkt);
+        document.getElementById('rtcStatus').textContent = "Synced (" + new Date().toLocaleTimeString() + ")";
+        document.getElementById('rtcStatus').style.color = "var(--primary)";
+      } catch (e) {
+        console.error("Failed to sync clock:", e);
+      }
+    }
+
+    function handleFileSelect(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      document.getElementById('fileNameText').textContent = file.name;
+      document.getElementById('fileSizeText').textContent = `${(file.size / 1024).toFixed(1)} KB (${file.size.toLocaleString()} bytes)`;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        selectedFileBytes = new Uint8Array(e.target.result);
+        if (bleServer && bleServer.connected) {
+          document.getElementById('btnStartOta').disabled = false;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    async function startOtaUpgrade() {
+      if (!selectedFileBytes || !charDataIn) return;
+
+      const btn = document.getElementById('btnStartOta');
+      btn.disabled = true;
+      const pFill = document.getElementById('otaProgress');
+      const pText = document.getElementById('otaPctText');
+      const sText = document.getElementById('otaStatusText');
+
+      try {
+        sText.textContent = "Negotiating upgrade session...";
+        const fwSize = selectedFileBytes.length;
+        let fwSum = 0;
+        for (let i = 0; i < fwSize; i++) fwSum = (fwSum + selectedFileBytes[i]) >>> 0;
+
+        // Step 1: Send Upgrade Request
+        // 28-byte header structure
+        const reqPkt = new Uint8Array(34);
+        const v = new DataView(reqPkt.buffer);
+        v.setUint16(0, 0x0101, true); // CMD_OTA_UPGRADE
+        v.setUint16(2, 30, true);     // len: 2 + 28
+        v.setUint16(4, 4, true);      // rx_pkt_ack = 4
+        v.setUint32(6, 0x4F544173, true); // 'OTAs'
+        v.setUint16(10, 1, true);     // Project ID
+        v.setUint16(12, 1, true);     // Chip ID
+        v.setUint16(14, 1, true);     // FW ID
+        v.setUint16(16, 1, true);     // SeqNum
+        v.setUint32(18, fwSize, true);
+        v.setUint32(22, fwSum, true);
+
+        // Header checksum
+        let hdrSum = 0;
+        for (let i = 6; i < 26; i++) hdrSum = (hdrSum + reqPkt[i]) >>> 0;
+        v.setUint32(26, hdrSum, true);
+
+        const ackPromise = new Promise(resolve => { otaAckResolver = resolve; });
+        await charDataIn.writeValue(reqPkt);
+        const status = await ackPromise;
+
+        if (status !== 0) {
+          throw new Error("Device refused upgrade. Status code: " + status);
+        }
+
+        sText.textContent = "Writing blocks...";
+        const chunkSize = 128;
+        const totalChunks = Math.ceil(fwSize / chunkSize);
+        const startTime = Date.now();
+
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, fwSize);
+          const chunk = selectedFileBytes.slice(start, end);
+
+          const rawPkt = new Uint8Array(4 + chunk.length);
+          const rv = new DataView(rawPkt.buffer);
+          rv.setUint16(0, 0x0102, true); // CMD_OTA_RAW
+          rv.setUint16(2, chunk.length, true);
+          rawPkt.set(chunk, 4);
+
+          // Wait for ACK every 4 packets or last packet
+          if ((i + 1) % 4 === 0 || i === totalChunks - 1) {
+            const chunkAck = new Promise(resolve => { otaAckResolver = resolve; });
+            await charDataIn.writeValue(rawPkt);
+            await chunkAck;
+          } else {
+            await charDataIn.writeValue(rawPkt);
+          }
+
+          const pct = Math.floor(((i + 1) / totalChunks) * 100);
+          pFill.style.width = pct + "%";
+          pText.textContent = pct + "%";
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          const speed = (start / 1024) / elapsedSec;
+          sText.textContent = `Uploading chunk ${i + 1}/${totalChunks} (${speed.toFixed(1)} KB/s)...`;
+        }
+
+        sText.textContent = "Finalizing & rebooting...";
+        const endPkt = new Uint8Array(4);
+        new DataView(endPkt.buffer).setUint16(0, 0x0103, true); // CMD_OTA_END
+        await charDataIn.writeValue(endPkt);
+
+        sText.textContent = "Upgrade complete! Sensor rebooting.";
+        alert("Upgrade successful! The sensor is switching banks and rebooting into the new firmware.");
+      } catch (err) {
+        console.error("OTA Error:", err);
+        sText.textContent = "Error: " + err.message;
+        alert("OTA Upgrade Error: " + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function updateLiveTelemetry(e) {
+      if (!e) return;
+      const isOpen = Boolean(e.flags & 0x01);
+      const isAjar = Boolean(e.flags & 0x08);
+
+      const doorText = document.getElementById('doorText');
+      const doorIcon = document.getElementById('doorIcon');
+      const doorSub = document.getElementById('doorSubtext');
+
+      if (isAjar) {
+        doorText.textContent = "DOOR AJAR (>45s)";
+        doorText.className = "door-state-text door-open";
+        doorIcon.textContent = "⚠️";
+        doorSub.textContent = "Alert: Door left open too long";
+      } else if (isOpen) {
+        doorText.textContent = "DOOR OPEN";
+        doorText.className = "door-state-text door-open";
+        doorIcon.textContent = "🚪";
+        doorSub.textContent = "Sensors separated (reed switch OPEN)";
+      } else {
+        doorText.textContent = "DOOR CLOSED";
+        doorText.className = "door-state-text door-closed";
+        doorIcon.textContent = "🔒";
+        doorSub.textContent = e.dur > 0 ? `Closed after ${e.dur}s open` : "Magnet aligned (reed switch CLOSED)";
+      }
+
+      let batPct = 100;
+      if (e.vbat <= 2200) batPct = 0;
+      else if (e.vbat < 3000) batPct = Math.round(((e.vbat - 2200) * 100) / 800);
+
+      const elBat = document.getElementById('valBattery');
+      elBat.textContent = `${batPct} %`;
+      elBat.style.color = batPct > 50 ? "var(--primary)" : batPct > 20 ? "var(--warn)" : "#ef4444";
+
+      document.getElementById('valVoltage').textContent = `${e.vbat} mV (${(e.vbat / 1000).toFixed(2)} V)`;
+      document.getElementById('valCounter').textContent = `#${e.counter}`;
+      document.getElementById('valLastSeen').textContent = e.epoch > 0 ? new Date(e.epoch * 1000).toLocaleTimeString() : "Pre-sync event";
+    }
+
+    async function fetchLatestStatus() {
+      if (!charDataIn) return;
+      try {
+        const reqPkt = new Uint8Array(8);
+        const v = new DataView(reqPkt.buffer);
+        v.setUint16(0, 0x0301, true); // CMD_LOG_DUMP
+        v.setUint16(2, 4, true);
+        v.setUint32(4, 0, true);       // block 0
+
+        const dumpPromise = new Promise(resolve => { logDumpResolver = resolve; });
+        await (charDataIn.writeValueWithResponse ? charDataIn.writeValueWithResponse(reqPkt) : charDataIn.writeValue(reqPkt));
+        const payload = await Promise.race([
+          dumpPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000))
+        ]);
+
+        if (payload && payload.length >= 16) {
+          const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+          let latest = null;
+          for (let offset = 0; offset + 16 <= payload.byteLength; offset += 16) {
+            const epoch = view.getUint32(offset, true);
+            const cnt = view.getUint32(offset + 4, true);
+            const vbat = view.getUint16(offset + 8, true);
+            const dur = view.getUint16(offset + 10, true);
+            const flags = view.getUint8(offset + 12);
+            if (cnt === 0 && epoch === 0) continue;
+            if (!latest || cnt > latest.counter) {
+              latest = { counter: cnt, epoch, vbat, dur, flags };
+            }
+          }
+          if (latest) {
+            updateLiveTelemetry(latest);
+          }
+        }
+      } catch (e) {
+        console.warn("Could not auto-fetch latest status:", e);
+      }
+    }
+
+    async function fetchBlackboxLogs() {
+      if (!charDataIn) return;
+      const btn = document.getElementById('btnFetchLogs');
+      btn.disabled = true;
+      btn.textContent = "Downloading...";
+      const tableBody = document.getElementById('logTableBody');
+      tableBody.innerHTML = "";
+      downloadedEvents = [];
+
+      try {
+        let blockIdx = 0;
+        let done = false;
+
+        while (!done && blockIdx < 20) { // Fetch up to 20 blocks
+          const reqPkt = new Uint8Array(8);
+          const v = new DataView(reqPkt.buffer);
+          v.setUint16(0, 0x0301, true); // CMD_LOG_DUMP
+          v.setUint16(2, 4, true);
+          v.setUint32(4, blockIdx, true);
+
+          const dumpPromise = new Promise(resolve => { logDumpResolver = resolve; });
+          await (charDataIn.writeValueWithResponse ? charDataIn.writeValueWithResponse(reqPkt) : charDataIn.writeValue(reqPkt));
+          const payload = await dumpPromise;
+
+          if (!payload || payload.length === 0 || (payload.length === 2 && payload[0] === 0xFF && payload[1] === 0xFF)) {
+            done = true;
+            break;
+          }
+
+          const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+          for (let offset = 0; offset + 16 <= payload.byteLength; offset += 16) {
+            const epoch = view.getUint32(offset, true);
+            const cnt = view.getUint32(offset + 4, true);
+            const vbat = view.getUint16(offset + 8, true);
+            const dur = view.getUint16(offset + 10, true);
+            const flags = view.getUint8(offset + 12);
+
+            if (cnt === 0 && epoch === 0) continue;
+
+            const isOpen = Boolean(flags & 0x01);
+            const isAjar = Boolean(flags & 0x08);
+            const isBoot = Boolean(flags & 0x02);
+            const dateStr = epoch > 0 
+              ? new Date(epoch * 1000).toLocaleString() 
+              : `<span style="color:var(--text-muted); font-size:0.8rem;" title="Logged before RTC synchronization">⏳ Pre-sync (#${cnt})</span>`;
+            const stateStr = isAjar ? "⚠️ Door Ajar Alert" : isOpen ? "🚪 Door Opened" : "🔒 Door Closed";
+
+            downloadedEvents.push({ counter: cnt, epoch, dateStr, stateStr, dur, vbat, flags });
+          }
+          blockIdx++;
+        }
+
+        if (downloadedEvents.length === 0) {
+          tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No records found in flash buffer.</td></tr>`;
+        } else {
+          downloadedEvents.sort((a, b) => b.counter - a.counter);
+          // Update live state with the most recent event
+          updateLiveTelemetry(downloadedEvents[0]);
+
+          tableBody.innerHTML = downloadedEvents.map(e => `
+            <tr>
+              <td><strong>#${e.counter}</strong></td>
+              <td>${e.dateStr}</td>
+              <td style="color:${e.stateStr.includes('Opened') ? 'var(--warn)' : 'var(--primary)'}">${e.stateStr}</td>
+              <td>${e.dur > 0 ? e.dur + ' s' : '-'}</td>
+              <td>${e.vbat} mV</td>
+              <td><code>0x${e.flags.toString(16).padStart(2, '0').toUpperCase()}</code></td>
+            </tr>
+          `).join('');
+          document.getElementById('btnExportCsv').disabled = false;
+        }
+      } catch (err) {
+        console.error("Log fetch failed:", err);
+        alert("Failed to download logs: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = "<span>📥</span> Download Events";
+      }
+    }
+
+    function exportCsv() {
+      if (downloadedEvents.length === 0) return;
+      let csv = "Counter,Timestamp,State,DurationSec,BatteryMv,Flags\n";
+      downloadedEvents.forEach(e => {
+        const cleanDate = e.epoch > 0 ? new Date(e.epoch * 1000).toISOString() : `Pre-sync (#${e.counter})`;
+        csv += `${e.counter},"${cleanDate}","${e.stateStr}",${e.dur},${e.vbat},0x${e.flags.toString(16).padStart(2, '0').toUpperCase()}\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dw2_flight_recorder_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+    }
+
+    function copyBlueprintPath(filename) {
+      const fullPath = `homeassistant/blueprints/${filename}`;
+      navigator.clipboard.writeText(fullPath).then(() => {
+        alert(`Blueprint path copied to clipboard:\n${fullPath}\n\nPlace it in your Home Assistant configuration directory under:\n/config/blueprints/automation/`);
+      });
+    }
+  </script>
+</body>
+</html>

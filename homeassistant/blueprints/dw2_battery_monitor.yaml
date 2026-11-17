@@ -1,0 +1,47 @@
+blueprint:
+  name: "Sonoff DW2 — Proactive Low Battery Warning"
+  description: >
+    Notifies when the battery of a Sonoff DW2 drops below a reliable operating voltage or percentage,
+    allowing replacement before sensor dropouts occur.
+  domain: automation
+  input:
+    battery_sensor:
+      name: Battery Sensor
+      description: The battery percentage entity of the DW2 sensor.
+      selector:
+        entity:
+          domain: sensor
+          device_class: battery
+    threshold_percent:
+      name: Battery Threshold (%)
+      description: Send alert when battery falls at or below this percentage.
+      default: 20
+      selector:
+        number:
+          min: 5
+          max: 50
+          unit_of_measurement: "%"
+    notify_device:
+      name: Mobile App Notification Target
+      description: The phone or tablet to receive the battery alert.
+      selector:
+        device:
+          integration: mobile_app
+
+mode: single
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input battery_sensor
+    below: !input threshold_percent
+
+action:
+  - domain: mobile_app
+    type: notify
+    device_id: !input notify_device
+    title: "🔋 Low Battery Warning"
+    message: >-
+      {{ state_attr(battery_sensor.entity_id, 'friendly_name') | default('DW2 Sensor') }} is at {{ states(battery_sensor.entity_id) }}%. Please replace the 2x AAA batteries soon!
+    data:
+      tag: "dw2_low_battery_{{ states[battery_sensor.entity_id].object_id }}"
+      group: "battery-maintenance"

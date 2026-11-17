@@ -19,6 +19,7 @@
 static uint32_t g_write_addr = DW2_FLASH_LOG_BASE_ADDR;
 static uint32_t g_total_count = 0;
 static uint32_t g_last_counter = 0;
+static uint32_t g_last_epoch = 0;
 static bool     g_initialized = false;
 
 static uint8_t CalcEntryChecksum(const dw2_log_entry_t *entry)
@@ -158,11 +159,15 @@ void Dw2_FlashLog_Init(void)
         if (CalcEntryChecksum(&last_ent) == last_ent.checksum && last_ent.event_counter != 0xFFFFFFFFU)
         {
             g_last_counter = last_ent.event_counter;
+            if (last_ent.epoch_sec != 0xFFFFFFFFU && last_ent.epoch_sec > 0)
+            {
+                g_last_epoch = last_ent.epoch_sec;
+            }
         }
     }
 
-    DW2_LOG("[LOG] Log head located at 0x%08X (Sector %u), recovered entries=%u, last_counter=%u\r\n",
-            g_write_addr, (g_write_addr - DW2_FLASH_LOG_BASE_ADDR) / DW2_FLASH_LOG_SECTOR_SIZE, g_total_count, g_last_counter);
+    DW2_LOG("[LOG] Log head located at 0x%08X (Sector %u), recovered entries=%u, last_counter=%u, last_epoch=%u\r\n",
+            g_write_addr, (g_write_addr - DW2_FLASH_LOG_BASE_ADDR) / DW2_FLASH_LOG_SECTOR_SIZE, g_total_count, g_last_counter, g_last_epoch);
 
     g_initialized = true;
 }
@@ -275,6 +280,11 @@ uint32_t Dw2_FlashLog_GetTotalCount(void)
 uint32_t Dw2_FlashLog_GetLastCounter(void)
 {
     return g_last_counter;
+}
+
+uint32_t Dw2_FlashLog_GetLastEpoch(void)
+{
+    return g_last_epoch;
 }
 
 uint32_t Dw2_FlashLog_GetWriteAddr(void)

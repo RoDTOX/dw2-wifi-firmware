@@ -16,6 +16,7 @@ bool Dw2_FlashLog_Read(uint32_t entry_idx, dw2_log_entry_t *out_entry);
 bool Dw2_FlashLog_Erase(void);
 uint32_t Dw2_FlashLog_GetTotalCount(void);
 uint32_t Dw2_FlashLog_GetLastCounter(void);
+uint32_t Dw2_FlashLog_GetLastEpoch(void);
 uint32_t Dw2_FlashLog_GetWriteAddr(void);
 
 #endif /* __DW2_FLASH_LOG_H__ */

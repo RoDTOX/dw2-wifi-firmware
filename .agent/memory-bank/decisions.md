@@ -41,3 +41,18 @@
 
 - **Decision:** Guard the cold boot sequence in `Dw2_CmMsgHandler` with `g_app.initialized` and resume `g_app.event_counter` from the latest valid SPI Flash log entry (`Dw2_FlashLog_GetLastCounter()`).
 - **Rationale:** Discovered during Claude Code static audit; BLE advertising parameter re-configuration after disconnection re-triggered the boot branch, causing duplicate heartbeat timers and spurious LED blinks. Resuming the event counter ensures monotonic sequence continuity across battery swaps and warm boots.
+
+## ADR-009: Web Companion Dashboard & WinRT GATT Stabilization
+
+- **Decision:** Implement zero-install browser dashboard (`localhost:8080`) using Web Bluetooth API. Add 600ms WinRT GATT delay and a 3-attempt retry loop for Windows Bluetooth stack, and configure BLE SMP `bond = FALSE` in firmware.
+- **Rationale:** Windows 10/11 WinRT Bluetooth stack drops connections immediately if peripheral requests bonding without pairing support or if service discovery races before the connection parameters settle. `bond = FALSE` and delay ensures stable GATT operations.
+
+## ADR-010: RTC Persistent Epoch Recovery & Visual Unsynced Indication
+
+- **Decision:** Restore last recorded epoch timestamp from the circular SPI Flash blackbox (`Dw2_FlashLog_GetLastEpoch()`) on boot and alert the user with 3 micro-blinks on door open/close if the clock is uncalibrated. Confirm valid time sync with a solid 400ms LED glow.
+- **Rationale:** Without an internal coin-cell battery, pulling AAA cells or rebooting resets the hardware RTC to epoch 0. Restoring the last known epoch prevents temporal discontinuities, and visual LED feedback prompts the user to sync time.
+
+## ADR-011: Automatic Serial Port Detection for Flashing Utilities
+
+- **Decision:** Implement `auto_detect_port()` across `tools/auto_flasher.py`, `tools/opl1000_flasher.py`, and `tools/dw2_tool.py` to auto-discover USB-UART bridge chips (CH340, CP210x, FTDI).
+- **Rationale:** Hardcoding `COM7` led to flashing failures when adapters enumerated on different ports (e.g. `COM6`), creating unnecessary friction during serial recovery. Auto-detection provides zero-config flashing out-of-the-box.

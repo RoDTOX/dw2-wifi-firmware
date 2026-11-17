@@ -38,9 +38,9 @@
 #define DW2_DOOR_AJAR_TIMEOUT_SEC   (45U)
 #define DW2_DOOR_AJAR_REPEAT_SEC    (15U)
 
-/* Secret Magnetic Knock: 5 comfortable transitions with up to 2.5s gap */
-#define DW2_MAGNET_KNOCK_MAX_GAP_MS (2500U)     /* 2.5 seconds allowed between flicks - comfortable human pace */
-#define DW2_MAGNET_KNOCK_THRESHOLD  (5U)        /* 5 flicks to trigger Connectable OTA mode */
+/* Secret Magnetic Knock: 5 rapid transitions within 700ms gap (intentional cadence) */
+#define DW2_MAGNET_KNOCK_MAX_GAP_MS (700U)      /* 700 ms max gap between knocks - avoids accidental door open triggers */
+#define DW2_MAGNET_KNOCK_THRESHOLD  (5U)        /* 5 rapid knocks to trigger Connectable OTA mode */
 
 /* BLE Advertising parameters - Broadcast Burst */
 #define DW2_BLE_ADV_INTERVAL_MIN    (0x0020U)   /* 20 ms (32 * 0.625 ms) */

@@ -23,6 +23,7 @@
   <a href="#-why-this-project">✨ <b>Why This Project?</b></a> •
   <a href="#-stock-vs-custom">⚖️ <b>Stock vs Custom</b></a> •
   <a href="#-home-assistant-setup">🏠 <b>Home Assistant</b></a> •
+  <a href="#-web-companion-dashboard">💻 <b>Web Dashboard</b></a> •
   <a href="#-button--led-guide">🎛️ <b>Button & LED</b></a> •
   <a href="#-how-to-flash">🚀 <b>How to Flash</b></a> •
   <a href="#-for-developers">🔬 <b>For Developers</b></a>
@@ -76,6 +77,35 @@ No custom add-on or YAML configuration is required:
 > [!TIP]
 > If Home Assistant doesn't see it right away, open and close the door once or press the small internal button (`S1`) to wake the sensor.
 
+### 📋 Automation Blueprints (Ready to Import)
+
+Save hours of manual YAML configuration with our verified Home Assistant blueprints:
+
+| Blueprint | Purpose | File Link |
+|---|---|---|
+| **Smart Heating Cutoff** | Automatically drops thermostat / turns off heating when window or door stays open > 30s. Restores comfort temperature on close. | [`smart_heating_window_cutoff.yaml`](file:///homeassistant/blueprints/smart_heating_window_cutoff.yaml) |
+| **Door Left Ajar Reminder** | Sends critical push notifications or voice alerts if refrigerator or front door is left ajar > 45s. | [`door_ajar_reminder.yaml`](file:///homeassistant/blueprints/door_ajar_reminder.yaml) |
+| **Proactive Battery Monitor** | Proactively notifies before cell depletion when battery drops below 20% or 2.4V. | [`dw2_battery_monitor.yaml`](file:///homeassistant/blueprints/dw2_battery_monitor.yaml) |
+
+To use: copy any blueprint into your Home Assistant `/config/blueprints/automation/` folder or import directly in the UI.
+
+---
+
+## 💻 Web Companion Dashboard
+
+Manage, test, and upgrade your DW2 sensor with **zero software installation** directly in Google Chrome, Microsoft Edge, or Android Chrome via native **Web Bluetooth API**:
+
+```powershell
+python tools/dw2_tool.py gui
+```
+
+*(Or simply double-click [`web/index.html`](file:///web/index.html) in any supported browser)*
+
+* **🚪 Live Telemetry:** Real-time visual door status, battery gauge, voltage (mV), and signal strength (RSSI).
+* **⚡ 1-Click RTC Clock Sync:** Syncs the sensor's internal 32.768 kHz RTC clock with host PC/phone epoch time.
+* **📋 128 KB Blackbox History & CSV Export:** Downloads persistent events from SPI flash memory into an interactive table with instant CSV export.
+* **🚀 Over-The-Air Wireless Flasher:** Drag and drop `dw2_ble.bin` to upgrade firmware wirelessly with live progress tracking and speed metrics.
+
 ---
 
 ## 🎛️ Button & LED Guide
@@ -115,11 +145,13 @@ TXD              -------> RXD
 > [!CAUTION]
 > Use **3.3V logic levels only** (5V will permanently damage the chip). Remove AAA batteries while powering via USB.
 
-1. Open `third_party/OPL1000A2-SDK/Tool/Download/download_RELEASE.exe`.
-2. Select your COM port, Baud rate `115200`.
-3. Choose the firmware file: `third_party/OPL1000A2-SDK/Tool/Download/Patch/opl1000.bin`.
-4. Click **Start**, then connect 3.3V power (or touch `RST` to `GND`). Flashing finishes in ~15 seconds.
-5. Disconnect wires, insert AAA batteries, and close the case.
+1. Run the auto-flashing tool (it detects your USB-UART adapter port automatically):
+   ```powershell
+   python tools/auto_flasher.py
+   ```
+   *(Or specify manually: `python tools/opl1000_flasher.py -p COM6`)*
+2. With `GPIO0` held to `GND`, connect 3.3V power (or touch `RST` to `GND`). The tool detects the bootloader and completes full write in ~20 seconds.
+3. Disconnect wires, release `GPIO0`, insert AAA batteries, and close the case. The LED will blink 3 times on boot.
 
 </details>
 

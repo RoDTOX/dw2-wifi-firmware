@@ -56,6 +56,7 @@ typedef struct
     uint8_t         knock_count;
     uint8_t         pending_connectable;
     uint8_t         initialized;
+    uint8_t         time_synced;
     uint8_t         btn_pressed;
     uint32_t        btn_press_tick;
 } dw2_app_ctx_t;
@@ -87,10 +88,35 @@ extern uint32_t Hal_Sys_SwResetAll_patch(void);
 static uint32_t g_sync_tick = 0;
 static uint32_t g_door_open_tick = 0;
 
+
+static void Dw2_LedSet(uint8_t on)
+{
+    Hal_Vic_GpioOutput(DW2_LED_IO_PORT, on ? GPIO_LEVEL_HIGH : GPIO_LEVEL_LOW);
+}
+
+static void Dw2_LedBlink(uint8_t count, uint32_t on_ms, uint32_t off_ms)
+{
+    for (uint8_t i = 0; i < count; i++)
+    {
+        Dw2_LedSet(1U);
+        osDelay(on_ms);
+        Dw2_LedSet(0U);
+        if (i + 1 < count && off_ms > 0)
+        {
+            osDelay(off_ms);
+        }
+    }
+}
+
 void Dw2_SetEpochSec(uint32_t epoch)
 {
     g_app.base_epoch_sec = epoch;
     g_sync_tick = xTaskGetTickCount();
+    g_app.time_synced = 1U;
+    DW2_LOG("[DW2] Epoch synchronized: %u\r\n", epoch);
+
+    /* Solid 400ms confirmation glow: "Clock is successfully synchronized!" */
+    Dw2_LedBlink(1, 400, 0);
 }
 
 static uint32_t Dw2_GetCurrentEpochSec(void)
@@ -116,24 +142,6 @@ static void Dw2_ArmGpioInt(E_GpioIdx_t pin, E_GpioLevel_t current_level, T_Gpio_
     Hal_Vic_GpioIntEn(pin, 1U);
 }
 
-static void Dw2_LedSet(uint8_t on)
-{
-    Hal_Vic_GpioOutput(DW2_LED_IO_PORT, on ? GPIO_LEVEL_HIGH : GPIO_LEVEL_LOW);
-}
-
-static void Dw2_LedBlink(uint8_t count, uint32_t on_ms, uint32_t off_ms)
-{
-    for (uint8_t i = 0; i < count; i++)
-    {
-        Dw2_LedSet(1U);
-        osDelay(on_ms);
-        Dw2_LedSet(0U);
-        if (i + 1 < count && off_ms > 0)
-        {
-            osDelay(off_ms);
-        }
-    }
-}
 
 /**
  * @brief Measure battery voltage in millivolts via AuxADC internal VBAT and calibration.
@@ -306,21 +314,15 @@ static void Dw2_SetAdvParams(UINT8 adv_type)
 
 static void Dw2_TriggerBurst(uint8_t extra_flags)
 {
-    if (g_app.state == DW2_BLE_STATE_CONNECTABLE || g_app.state == DW2_BLE_STATE_CONNECTED)
+    if (g_app.state == DW2_BLE_STATE_CONNECTED)
     {
+        /* While connected over GATT, queue burst for immediate emission on disconnect */
+        g_app.pending_burst = 1U;
+        g_app.pending_flags = (g_app.door_open ? DW2_FLAG_DOOR_OPEN : 0U) | extra_flags;
         return;
     }
 
     uint8_t flags = (g_app.door_open ? DW2_FLAG_DOOR_OPEN : 0U) | extra_flags;
-
-    if (g_app.state == DW2_BLE_STATE_ADVERTISING)
-    {
-        g_app.pending_burst = 1U;
-        g_app.pending_flags = flags;
-        LeGapAdvertisingEnable(FALSE);
-        return;
-    }
-
     uint16_t vbat_mv = Dw2_ReadBatteryMv();
     if (vbat_mv < DW2_VBAT_LOW_THRESHOLD_MV && vbat_mv > 0)
     {
@@ -332,8 +334,23 @@ static void Dw2_TriggerBurst(uint8_t extra_flags)
     }
 
     Dw2_BuildAdvPacket(flags, vbat_mv);
-    DW2_LOG("[DW2] Burst: open=%u flags=0x%02X cnt=%u dur=%us vbat=%umV\r\n",
-            g_app.door_open, flags, g_app.event_counter, g_app.last_open_duration, vbat_mv);
+    DW2_LOG("[DW2] Burst: open=%u flags=0x%02X cnt=%u dur=%us vbat=%umV state=%u\r\n",
+            g_app.door_open, flags, g_app.event_counter, g_app.last_open_duration, vbat_mv, g_app.state);
+
+    if (g_app.state == DW2_BLE_STATE_CONNECTABLE)
+    {
+        /* Live update of BTHome payload in connectable advertising! Home Assistant syncs in real-time */
+        LeGapSetAdvData(sizeof(g_adv_data), g_adv_data);
+        return;
+    }
+
+    if (g_app.state == DW2_BLE_STATE_ADVERTISING)
+    {
+        g_app.pending_burst = 1U;
+        g_app.pending_flags = flags;
+        LeGapAdvertisingEnable(FALSE);
+        return;
+    }
 
     LeGapSetAdvData(sizeof(g_adv_data), g_adv_data);
 }
@@ -353,7 +370,6 @@ static void Dw2_EnterConnectableMode(void)
     {
         g_app.state = DW2_BLE_STATE_CONNECTABLE;
         Dw2_SetAdvParams(LE_HCI_ADV_TYPE_ADV_IND);
-        LeGapAdvertisingEnable(TRUE);
     }
 
     LeSendMessageAfter(&g_app.task, DW2_MSG_CONNECTABLE_TIMEOUT, NULL, DW2_BLE_CONNECTABLE_TIMEOUT_MS);
@@ -444,7 +460,7 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             DW2_LOG("[DW2] BLE Init OK\r\n");
             Dw2_Ota_Init(&g_app.task);
             LeSmpInit(&g_app.task);
-            LeSmpSetDefaultConfig(LE_SM_IO_CAP_NO_IO, FALSE, FALSE, TRUE);
+            LeSmpSetDefaultConfig(LE_SM_IO_CAP_NO_IO, FALSE, FALSE, FALSE);
 
             BD_ADDR bd_addr;
             if (LeGapGetBdAddr(bd_addr) == SYS_ERR_SUCCESS)
@@ -478,10 +494,21 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
         {
             if (!g_app.initialized)
             {
-                /* Initialize 128 KB SPI Flash logger and restore monotonic event counter */
+                /* Initialize 128 KB SPI Flash logger and restore monotonic event counter & epoch */
                 Dw2_FlashLog_Init();
                 g_app.event_counter = Dw2_FlashLog_GetLastCounter();
-                DW2_LOG("[DW2] Resumed monotonic counter from flash: #%u\r\n", g_app.event_counter);
+                uint32_t last_epoch = Dw2_FlashLog_GetLastEpoch();
+                if (last_epoch > 0)
+                {
+                    Dw2_SetEpochSec(last_epoch);
+                    g_app.time_synced = 0U; /* Retain alert until authoritative sync occurs */
+                    DW2_LOG("[DW2] Resumed counter #%u and epoch %u from flash (pending auth sync)\r\n", g_app.event_counter, last_epoch);
+                }
+                else
+                {
+                    g_app.time_synced = 0U;
+                    DW2_LOG("[DW2] Resumed monotonic counter from flash: #%u (epoch waiting for sync)\r\n", g_app.event_counter);
+                }
 
                 E_GpioLevel_t door_lvl = Hal_Vic_GpioInput(DW2_MAGNETIC_IO_PORT);
                 E_GpioLevel_t btn_lvl  = Hal_Vic_GpioInput(DW2_BUTTON_IO_PORT);
@@ -492,6 +519,7 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
 
                 ps_smart_sleep(DW2_SMART_SLEEP_EN);
                 LeSendMessageAfter(&g_app.task, DW2_MSG_HEARTBEAT, NULL, DW2_HEARTBEAT_PERIOD_MS);
+                LeSendMessageAfter(&g_app.task, DW2_MSG_UNSYNCED_ALERT, NULL, 15000U);
 
                 g_app.initialized = 1U;
                 Dw2_LedBlink(3, DW2_LED_BLINK_SHORT_MS, DW2_LED_BLINK_GAP_MS);
@@ -500,6 +528,14 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             else if (g_app.state == DW2_BLE_STATE_CONNECTABLE)
             {
                 LeGapAdvertisingEnable(TRUE);
+            }
+            else if (g_app.pending_burst)
+            {
+                /* Post-disconnect or pending burst */
+                g_app.pending_burst = 0U;
+                uint16_t vbat_mv = Dw2_ReadBatteryMv();
+                Dw2_BuildAdvPacket(g_app.pending_flags, vbat_mv);
+                LeGapSetAdvData(sizeof(g_adv_data), g_adv_data);
             }
             break;
         }
@@ -565,14 +601,38 @@ static void Dw2_CmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             break;
         }
 
+        case LE_CM_MSG_SIGNAL_UPDATE_REQ:
+        {
+            LE_CM_MSG_SIGNAL_UPDATE_REQ_T *req = (LE_CM_MSG_SIGNAL_UPDATE_REQ_T *)message;
+            LeGapConnUpdateResponse(req->conn_hdl, req->identifier, TRUE);
+            break;
+        }
+
+        case LE_CM_MSG_CONN_PARA_REQ:
+        {
+            LE_CM_MSG_CONN_PARA_REQ_T *req = (LE_CM_MSG_CONN_PARA_REQ_T *)message;
+            LeGapConnParaRequestRsp(req->conn_hdl, TRUE);
+            break;
+        }
+
         case LE_CM_MSG_DISCONNECT_COMPLETE_IND:
         {
             Dw2_Ota_OnDisconnect();
             if (!Dw2_Ota_IsUpgradeInProgress())
             {
                 g_app.state = DW2_BLE_STATE_IDLE;
-                ps_smart_sleep(DW2_SMART_SLEEP_EN);
+
+                /* Refresh door physical state on disconnect */
+                E_GpioLevel_t lvl = Hal_Vic_GpioInput(DW2_MAGNETIC_IO_PORT);
+                g_app.door_open = (lvl != DW2_DOOR_CLOSED_LEVEL) ? 1U : 0U;
+                Dw2_ArmGpioInt(DW2_MAGNETIC_IO_PORT, lvl, Dw2_DoorGpioCb);
+
+                /* Queue instant burst to Home Assistant with true state */
+                g_app.pending_burst = 1U;
+                g_app.pending_flags = (g_app.door_open ? DW2_FLAG_DOOR_OPEN : 0U);
+
                 Dw2_SetAdvParams(LE_HCI_ADV_TYPE_ADV_NONCONN_IND);
+                ps_smart_sleep(DW2_SMART_SLEEP_EN);
             }
             break;
         }
@@ -666,6 +726,15 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                 g_app.state = DW2_BLE_STATE_IDLE;
                 ps_smart_sleep(DW2_SMART_SLEEP_EN);
                 Dw2_SetAdvParams(LE_HCI_ADV_TYPE_ADV_NONCONN_IND);
+
+                /* Refresh door physical state on timeout */
+                E_GpioLevel_t lvl = Hal_Vic_GpioInput(DW2_MAGNETIC_IO_PORT);
+                g_app.door_open = (lvl != DW2_DOOR_CLOSED_LEVEL) ? 1U : 0U;
+                Dw2_ArmGpioInt(DW2_MAGNETIC_IO_PORT, lvl, Dw2_DoorGpioCb);
+
+                /* Queue fresh burst to ensure Home Assistant is 100% in sync */
+                g_app.pending_burst = 1U;
+                g_app.pending_flags = (g_app.door_open ? DW2_FLAG_DOOR_OPEN : 0U);
             }
             break;
         }
@@ -675,13 +744,16 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             E_GpioLevel_t lvl = Hal_Vic_GpioInput(DW2_MAGNETIC_IO_PORT);
             uint8_t is_open = (lvl != DW2_DOOR_CLOSED_LEVEL) ? 1U : 0U;
 
-            /* Secret Magnetic Knock gesture detection */
-            g_app.knock_count++;
-            LeSendMessageAfter(&g_app.task, DW2_MSG_KNOCK_TIMEOUT, NULL, DW2_MAGNET_KNOCK_MAX_GAP_MS);
-            if (g_app.knock_count >= DW2_MAGNET_KNOCK_THRESHOLD)
+            /* Secret Magnetic Knock: only count intentional Close -> Open cadence */
+            if (is_open && !g_app.door_open)
             {
-                g_app.knock_count = 0;
-                Dw2_EnterConnectableMode();
+                g_app.knock_count++;
+                LeSendMessageAfter(&g_app.task, DW2_MSG_KNOCK_TIMEOUT, NULL, DW2_MAGNET_KNOCK_MAX_GAP_MS);
+                if (g_app.knock_count >= DW2_MAGNET_KNOCK_THRESHOLD)
+                {
+                    g_app.knock_count = 0;
+                    Dw2_EnterConnectableMode();
+                }
             }
 
             Dw2_ArmGpioInt(DW2_MAGNETIC_IO_PORT, lvl, Dw2_DoorGpioCb);
@@ -695,6 +767,12 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                     g_door_open_tick = xTaskGetTickCount();
                     g_app.open_duration_sec = 0;
                     Dw2_LedBlink(1, DW2_LED_BLINK_SHORT_MS, 0);
+                    if (!g_app.time_synced)
+                    {
+                        osDelay(100);
+                        /* Warning alert: 3 rapid micro-blinks signaling time needs synchronization! */
+                        Dw2_LedBlink(3, 25, 35);
+                    }
                     LeSendMessageAfter(&g_app.task, DW2_MSG_DOOR_TIMER, NULL, 1000U);
                     Dw2_TriggerBurst(0U);
                 }
@@ -712,6 +790,12 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
                     }
                     g_door_open_tick = 0;
                     Dw2_LedBlink(2, DW2_LED_BLINK_SHORT_MS, DW2_LED_BLINK_GAP_MS);
+                    if (!g_app.time_synced)
+                    {
+                        osDelay(100);
+                        /* Warning alert: 3 rapid micro-blinks signaling time needs synchronization! */
+                        Dw2_LedBlink(3, 25, 35);
+                    }
                     Dw2_TriggerBurst(0U);
                 }
             }
@@ -766,6 +850,34 @@ static void Dw2_AppMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
             Dw2_TriggerBurst(DW2_FLAG_HEARTBEAT);
             break;
 
+        case DW2_MSG_UNSYNCED_ALERT:
+            if (!g_app.time_synced)
+            {
+                /* Gentle double micro-pulse every 45s as standing visual reminder to sync RTC */
+                Dw2_LedBlink(2, 25, 50);
+                LeSendMessageAfter(&g_app.task, DW2_MSG_UNSYNCED_ALERT, NULL, 45000U);
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void Dw2_SmMsgHandler(TASK task, MESSAGEID id, MESSAGE message)
+{
+    (void)task;
+
+    switch (id)
+    {
+        case LE_SMP_MSG_PAIRING_ACTION_IND:
+        {
+            LE_SMP_MSG_PAIRING_ACTION_IND_T *ind = (LE_SMP_MSG_PAIRING_ACTION_IND_T *)message;
+            DW2_LOG("[DW2] SMP Pairing Action (hdl=%x, action=%d)\r\n", ind->conn_hdl, ind->action);
+            LeSmpSecurityRsp(ind->conn_hdl, TRUE);
+            break;
+        }
+
         default:
             break;
     }
@@ -780,6 +892,10 @@ static void Dw2_TaskHandler(TASK task, MESSAGEID id, MESSAGE message)
     else if ((id >= LE_GATT_MSG_BASE) && (id < LE_GATT_MSG_TOP))
     {
         Dw2_GattMsgHandler(task, id, message);
+    }
+    else if ((id >= LE_SMP_MSG_BASE) && (id < LE_SMP_MSG_TOP))
+    {
+        Dw2_SmMsgHandler(task, id, message);
     }
     else if ((id >= DW2_MSG_INITIALIZING) && (id < DW2_MSG_TOP))
     {

@@ -33,6 +33,7 @@ extern uint32_t g_ulMwOtaPrepareHeaderAddr;
 extern uint32_t g_ulMwOtaPrepareImageAddr;
 extern uint32_t g_ulMwOtaPrepareWriteSize;
 extern T_MwOtaFlashHeader g_tMwOtaPrepareHeaderInfo;
+extern T_MwOtaFlashHeader g_tMwOtaCurrentHeaderInfo;
 extern T_Hal_Flash_4KSectorAddrErase g_tMwOtaEraseFunc;
 extern T_Hal_Flash_AddrProgram g_tMwOtaWriteFunc;
 extern T_Hal_Flash_AddrRead g_tMwOtaReadFunc;
@@ -266,6 +267,16 @@ static void HandleOtaUpgradeReq(const uint8_t *data, uint16_t len)
     DW2_LOG("[OTA] Upgrade Req: total=%u B, chksum=0x%08X, rx_pkt_ack=%u\r\n",
             hdr->ulImageSize, hdr->ulImageSum, rx_pkt);
 
+    /* HARD SECURITY INVARIANT: Reject any binary exceeding partition bank limit (96 KB) */
+    if (hdr->ulImageSize > MW_OTA_IMAGE_SIZE || hdr->ulImageSize == 0)
+    {
+        DW2_LOG("[OTA] REJECTED: Image size %u B exceeds max bank capacity (%u B)!\r\n",
+                hdr->ulImageSize, MW_OTA_IMAGE_SIZE);
+        uint8_t st = DW2_OTA_STATUS_INVALID_LEN;
+        Dw2_Ota_SendResponse(DW2_RSP_OTA_UPGRADE, &st, 1);
+        return;
+    }
+
     /* Guarantee valid OTA layout and bank pointer even if cold boot lacked OTA headers */
     if (g_tMwOtaLayoutInfo.ulImageSize == 0)
     {
@@ -276,17 +287,56 @@ static void HandleOtaUpgradeReq(const uint8_t *data, uint16_t len)
         g_tMwOtaLayoutInfo.ulImageSize      = MW_OTA_IMAGE_SIZE;
     }
 
-    if (g_bMwOtaImageIdx == MW_OTA_IDX_INVALID)
-    {
-        g_bMwOtaImageIdx = 1; /* Target Bank 0 (0x00005000) for initial OTA */
-    }
-
     if (g_tMwOtaEraseFunc == NULL)
     {
         g_tMwOtaEraseFunc = Hal_Flash_4KSectorAddrErase;
         g_tMwOtaWriteFunc = Hal_Flash_AddrProgram;
         g_tMwOtaReadFunc  = Hal_Flash_AddrRead;
     }
+
+    /* Read flash headers directly to reliably determine active bank and next sequence number */
+    T_MwOtaFlashHeader h0, h1;
+    memset(&h0, 0, sizeof(h0));
+    memset(&h1, 0, sizeof(h1));
+    Hal_Flash_AddrRead(SPI_IDX_0, MW_OTA_HEADER_ADDR_1, 0, sizeof(T_MwOtaFlashHeader), (uint8_t *)&h0);
+    Hal_Flash_AddrRead(SPI_IDX_0, MW_OTA_HEADER_ADDR_2, 0, sizeof(T_MwOtaFlashHeader), (uint8_t *)&h1);
+
+    uint16_t s0 = MwOta_HeaderSeqNumGet(&h0);
+    uint16_t s1 = MwOta_HeaderSeqNumGet(&h1);
+    uint16_t current_seq = 0;
+
+    if (s0 != MW_OTA_SEQ_INVALID && s1 != MW_OTA_SEQ_INVALID)
+    {
+        if (s1 >= s0)
+        {
+            g_bMwOtaImageIdx = 1; /* Bank 1 is active -> target Bank 0 */
+            current_seq = s1;
+        }
+        else
+        {
+            g_bMwOtaImageIdx = 0; /* Bank 0 is active -> target Bank 1 */
+            current_seq = s0;
+        }
+    }
+    else if (s1 != MW_OTA_SEQ_INVALID)
+    {
+        g_bMwOtaImageIdx = 1; /* Target Bank 0 */
+        current_seq = s1;
+    }
+    else if (s0 != MW_OTA_SEQ_INVALID)
+    {
+        g_bMwOtaImageIdx = 0; /* Target Bank 1 */
+        current_seq = s0;
+    }
+    else
+    {
+        g_bMwOtaImageIdx = 1; /* Initial flash -> target Bank 0 */
+        current_seq = 0;
+    }
+
+    g_tMwOtaCurrentHeaderInfo.uwSeqNum = current_seq;
+    DW2_LOG("[OTA] Flash Headers: s0=%u, s1=%u -> current_seq=%u, target_bank=%u\r\n",
+            s0, s1, current_seq, (g_bMwOtaImageIdx == 0) ? 1 : 0);
 
     uint8_t state = MwOta_Prepare(hdr->uwProjectId, hdr->uwChipId, hdr->uwFirmwareId, hdr->ulImageSize, hdr->ulImageSum);
     if (state == MW_OTA_OK)

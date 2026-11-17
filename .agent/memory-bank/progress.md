@@ -18,10 +18,16 @@
 - BLE Security & Time Synchronization:
   - Added BLE Security Manager (`LE_SM_IO_CAP_NO_IO`, Just Works mode) to eliminate PIN errors on modern smartphones.
   - Added standard Current Time Service (CTS 0x1805 / 0x2A2B) to allow automatic time sync from phones or CLI.
-- Maintenance & Fast Dump:
+- Maintenance, Companion GUI & Blueprints:
   - Secret 5-flick magnetic knock and S1 button open a 3-minute connectable window.
   - Immediate `LeGapAdvertisingEnable(TRUE)` added upon S1/knock trigger.
-  - CLI `dw2_tool.py dump-logs` now scans up to 15s and defaults to fast retrieval of the last 20 entries (with `--count` and `--all` options).
+  - Native Web Bluetooth Companion Dashboard in `web/index.html` (real-time telemetry, 1-click RTC clock sync, 128KB blackbox CSV dump, wireless OTA flasher).
+  - CLI `dw2_tool.py gui` launches local dashboard on `http://localhost:8080`.
+  - Windows WinRT BLE handshake hardening: 600ms stabilization delay, 3-attempt retry loop, SMP `bond = FALSE`.
+  - Native Python 3 continuous flasher `tools/auto_flasher.py` and `tools/opl1000_flasher.py` with automatic USB-UART port discovery.
+  - Real-time diagnostic sniffer in `tools/raw_sniff.py`.
+  - 3 Home Assistant Blueprints in `homeassistant/blueprints/` (Smart Heating Window Cutoff, Door Ajar Alert, Low Battery Monitor).
+  - Verified 128 KB Blackbox recovery with 100 historical events dumped and RTC time calibrated.
 - ESP32 receiver component in `esp32_receiver/` ready for smart-home integration.
 - Public documentation in `README.md`.
 

@@ -1,0 +1,93 @@
+blueprint:
+  name: "Sonoff DW2 — Smart Heating Window/Door Cutoff"
+  description: >
+    Automatically turns off climate/heating or lowers target temperature when a door or window
+    is left open, preventing costly energy waste. Restores previous temperature or state when closed.
+  domain: automation
+  input:
+    door_sensor:
+      name: Door / Window Sensor
+      description: The Sonoff DW2 BTHome binary sensor.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: door
+    climate_target:
+      name: Climate / Thermostat Entity
+      description: The heating thermostat or air conditioner to control.
+      selector:
+        entity:
+          domain: climate
+    open_delay:
+      name: Open Delay (seconds)
+      description: Seconds the door must remain open before cutting heating (prevents triggers on quick entry/exit).
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 300
+          unit_of_measurement: seconds
+    eco_temperature:
+      name: Eco / Setback Temperature
+      description: Target temperature when window is open (or 0 to turn climate completely off).
+      default: 16
+      selector:
+        number:
+          min: 0
+          max: 22
+          unit_of_measurement: "°C"
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input door_sensor
+    to: "on"
+    for:
+      seconds: !input open_delay
+    id: door_opened
+
+  - platform: state
+    entity_id: !input door_sensor
+    to: "off"
+    for:
+      seconds: 5
+    id: door_closed
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: door_opened
+        sequence:
+          - service: scene.create
+            data:
+              scene_id: >-
+                dw2_climate_before_{{ states[door_sensor.entity_id].object_id }}
+              snapshot_entities:
+                - !input climate_target
+          - if:
+              - condition: template
+                value_template: "{{ (eco_temperature | float) > 0 }}"
+            then:
+              - service: climate.set_temperature
+                target:
+                  entity_id: !input climate_target
+                data:
+                  temperature: !input eco_temperature
+            else:
+              - service: climate.set_hvac_mode
+                target:
+                  entity_id: !input climate_target
+                data:
+                  hvac_mode: "off"
+
+      - conditions:
+          - condition: trigger
+            id: door_closed
+        sequence:
+          - service: scene.turn_on
+            target:
+              entity_id: >-
+                scene.dw2_climate_before_{{ states[door_sensor.entity_id].object_id }}
