@@ -24,3 +24,8 @@ Thumbs.db
 .vscode/
 __pycache__/
 *.pyc
+
+# Internal AI Agent directories
+.agent/
+.claude/
+.gemini/
